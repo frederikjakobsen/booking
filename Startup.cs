@@ -33,7 +33,7 @@ namespace BookingApp
         {
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlite ("DataSource=app.db"));
-            services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
+            services.AddDefaultIdentity<IdentityUser>()
                 .AddEntityFrameworkStores<ApplicationDbContext>();
             services.AddRazorPages();
             services.AddServerSideBlazor();
