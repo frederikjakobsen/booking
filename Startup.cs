@@ -15,6 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using BookingApp.Areas.Identity;
 using BookingApp.Data;
+using Microsoft.AspNetCore.Components.Server;
 
 namespace BookingApp
 {
@@ -34,11 +35,15 @@ namespace BookingApp
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlite ("DataSource=app.db"));
             services.AddDefaultIdentity<IdentityUser>()
+                .AddRoles<IdentityRole>()
                 .AddEntityFrameworkStores<ApplicationDbContext>();
             services.AddRazorPages();
             services.AddServerSideBlazor();
             services.AddScoped<AuthenticationStateProvider, RevalidatingIdentityAuthenticationStateProvider<IdentityUser>>();
-            services.AddSingleton<WeatherForecastService>();
+            services.AddScoped<BookingService>();
+            services.AddSingleton<TeamService>();
+            services.AddSingleton<BookingStorage>();
+            services.AddScoped<UserManagerService>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -56,7 +61,6 @@ namespace BookingApp
                 app.UseHsts();
             }
 
-            app.UseHttpsRedirection();
             app.UseStaticFiles();
 
             app.UseRouting();

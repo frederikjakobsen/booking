@@ -1,0 +1,70 @@
+﻿@page "/booking"
+@inject BookingService BookingService
+@inject TeamService TeamService
+@attribute [Authorize]
+
+<h1>Booking</h1>
+
+@if (bookings == null)
+{
+<p>Loading bookings..</p>
+}
+else
+{
+    <h2>Open sessions</h2>
+<table>
+@foreach (var open in bookings.OpenSlots)
+{
+    <tr>
+        <td>@open.Session.StartTime</td>
+    </tr>
+}
+</table>
+
+    <h2>Team sessions</h2>
+<table>
+@foreach (var team in bookings.TeamSlots)
+{
+    <tr>
+        <td>@TeamService.GetTeam(team.Session.TeamId).Name</td>
+        <td>@team.Session.StartTime</td>
+        <td><button @onclick="()=>Book(team.Session)">Book</button> @if (myTeamBookings.ContainsKey(team.Session.StartTime) && myTeamBookings[team.Session.StartTime] == team.Session.TeamId) { <text>BOOKED!</text> } </td>
+    </tr>
+}
+</table>
+}
+
+@code {
+    private BookingSchedule bookings = null;
+
+    private Dictionary<string, Team> teams = new Dictionary<string, Team>();
+
+    private Dictionary<DateTime, string> myTeamBookings = new Dictionary<DateTime, string>();
+
+    protected async override Task OnInitializedAsync()
+    {
+        Console.WriteLine("OnInit user manager");
+        bookings = await BookingService.GetBookingSchedule(DateTime.Today, TimeSpan.FromDays(1));
+
+        // TODO add sleep to check for race condition...
+
+        var myBookings = await BookingService.GetLoggedOnUserReservations();
+        var teamBookings = myBookings.Where(e => e.TeamId != null);
+        foreach(var teamBooking in teamBookings)
+        {
+            myTeamBookings.Add(teamBooking.StartTime, teamBooking.TeamId);
+        }
+
+        //dailyOpenSessions =bookings.OpenSlots.Select(e => new DateTime(e.Session.StartTime. e.Session.StartTime.Month)
+        
+    }
+
+    private async Task Book(TeamSession sessionToBook)
+    {
+        Console.WriteLine("Booking session: " + sessionToBook.TeamId + " at " + sessionToBook.StartTime);
+        await BookingService.MakeTeamReservation(sessionToBook);
+    }
+
+    //private Dictionary<DateTime, IEnumerable<OpenSession>> dailyOpenSessions;
+    
+}

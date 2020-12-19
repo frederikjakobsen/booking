@@ -1,0 +1,61 @@
+﻿@page "/usermanager"
+@using BookingApp.Data
+@inject UserManagerService UserManagerService 
+@attribute [Authorize(Roles = "approved")]
+
+<h1>User Manager</h1>
+
+@if (users == null)
+{
+    <p>Loading users..</p>
+} else
+{
+    <table>
+        <tr>
+            <th></th>
+            <th></th>
+        </tr>
+  @foreach (var user in users)
+  {
+      <tr>
+            <td>@user.Name</td>
+            <td>@if (!user.Approved) {
+            <button @onclick="()=>ApproveUser(user)">Approve</button>
+            Console.WriteLine("Not approved: " + user.Name);
+        }
+        else
+        {
+            <text>Approved</text>
+            <button @onclick="()=>RejectUser(user)">Reject</button>
+            Console.WriteLine("Already approved: " + user.Name);
+        }
+         
+    </td>
+        </tr>
+  }
+      </table>
+}
+
+@code {
+    private IEnumerable<BookingUser> users;
+
+    private async Task ApproveUser(BookingUser user)
+    {
+        Console.WriteLine($"Approving user..:{user.Name}");
+        await UserManagerService.ApproveUser(user);
+        user.Approved = true;
+    }
+
+    private async Task RejectUser(BookingUser user)
+    {
+        Console.WriteLine($"Rejecting user..:{user.Name}");
+        await UserManagerService.RejectUser(user);
+        user.Approved = false;
+    }
+
+    protected async override Task OnInitializedAsync()
+    {
+        Console.WriteLine("OnInit user manager");
+        users = await UserManagerService.GetUsers();
+    }
+}
