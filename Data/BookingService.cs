@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BookingApp.Data
@@ -36,8 +38,6 @@ namespace BookingApp.Data
         {
             this.scheduledTeams = ScheduledTeams;
         }
-
-        // TODO make DST aware!
 
         public IEnumerable<TeamSession> GetTeamSlots(DateTime from, TimeSpan duration)
         {
@@ -91,9 +91,9 @@ namespace BookingApp.Data
             var res = new List<OpenSession>();
             var currentTime = new DateTime(from.Year, from.Month, from.Day, from.Hour, 0, 0, from.Kind); // hourly rounded time
             var latestPossibleStart = from + duration - TimeSpan.FromHours(1);
-            while(currentTime <= latestPossibleStart)
+            while (currentTime <= latestPossibleStart)
             {
-                if (currentTime.TimeOfDay >= FirstSessionOfDay && currentTime.TimeOfDay + TimeSpan.FromHours(1) <= LastSessionOfDayEnd )
+                if (currentTime.TimeOfDay >= FirstSessionOfDay && currentTime.TimeOfDay + TimeSpan.FromHours(1) <= LastSessionOfDayEnd)
                 {
                     res.Add(new OpenSession { Size = OpenSessionSize, StartTime = currentTime });
                 }
@@ -129,8 +129,8 @@ namespace BookingApp.Data
 
     public class TimeSlotReservations
     {
-        public List<string> OpenReservations { get; set; }
-        public Dictionary<string, List<string>> TeamReservations { get; set; }
+        public HashSet<string> OpenReservations { get; set; }
+        public Dictionary<string, HashSet<string>> TeamReservations { get; set; }
     }
 
     public class BookedTimeSlot
@@ -142,10 +142,11 @@ namespace BookingApp.Data
 
     public class BookingStorage
     {
-        private readonly Dictionary<string, Dictionary<DateTime, UserReservation>> userReservations = new Dictionary<string, Dictionary<DateTime,UserReservation>>();
+        private readonly ConcurrentDictionary<string, Dictionary<DateTime, UserReservation>> userReservations = new ConcurrentDictionary<string, Dictionary<DateTime, UserReservation>>();
 
-        private readonly Dictionary<DateTime, TimeSlotReservations> bookingsWithReservations = new Dictionary<DateTime, TimeSlotReservations>();
+        private readonly ConcurrentDictionary<DateTime, TimeSlotReservations> bookingsWithReservations = new ConcurrentDictionary<DateTime, TimeSlotReservations>();
 
+        private readonly SemaphoreSlim reservationLock = new SemaphoreSlim(1);
 
         public IEnumerable<UserReservation> GetReservationsFor(string userId)
         {
@@ -154,49 +155,93 @@ namespace BookingApp.Data
 
         private bool IsTimeWithin(DateTime slot, DateTime from, TimeSpan duration)
         {
-            return slot >= from && slot<= from + duration;
+            return slot >= from && slot <= from + duration;
         }
 
-        public IEnumerable<BookedTimeSlot> GetAllReservationsBetween(DateTime from, TimeSpan duration)
+        public async Task<IEnumerable<BookedTimeSlot>> GetAllReservationsBetweenAsync(DateTime from, TimeSpan duration)
         {
-            return bookingsWithReservations.Where(bookedTimeSlot => IsTimeWithin(bookedTimeSlot.Key, from, duration)).Select(bookedTimeSlot => new BookedTimeSlot { Reservations = bookedTimeSlot.Value, StartTime = bookedTimeSlot.Key}).ToList();
-        }
-
-        public void RemoveReservation(string userId, UserReservation reservation)
-        {
-            var reservationsForUser = userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>());
-            if (reservationsForUser.Remove(reservation.StartTime))
+            await reservationLock.WaitAsync();
+            try
             {
-                var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime, new TimeSlotReservations { OpenReservations = new List<string>(), TeamReservations = new Dictionary<string, List<string>>() });
-                var reservationsForTeam = currentBookingsAtSameTime.TeamReservations.GetValueOrDefault(reservation.TeamId, new List<string>());
-                if (reservationsForTeam.Remove(userId))
-                    return;
-                currentBookingsAtSameTime.OpenReservations.Remove(userId);
+                return bookingsWithReservations.Where(bookedTimeSlot => IsTimeWithin(bookedTimeSlot.Key, from, duration))
+                    .Select(bookedTimeSlot => new BookedTimeSlot { Reservations = bookedTimeSlot.Value, StartTime = bookedTimeSlot.Key })
+                    .ToList();
+            }
+            finally
+            {
+                reservationLock.Release();
             }
         }
 
-        public void AddReservation(string userId, UserReservation reservation)
+        public async Task RemoveReservation(string userId, UserReservation reservation)
         {
-            var reservationsForUser = userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>());
-            reservationsForUser.Add(reservation.StartTime, reservation);
-            userReservations[userId] = reservationsForUser;
+            await reservationLock.WaitAsync();
+            try
+            {
 
-            var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime, new TimeSlotReservations { OpenReservations = new List<string>(), TeamReservations = new Dictionary<string, List<string>>()});
-            var teamReservations = currentBookingsAtSameTime.TeamReservations.GetValueOrDefault(reservation.TeamId, new List<string>());
-            teamReservations.Add(userId);
-            currentBookingsAtSameTime.TeamReservations[reservation.TeamId] = teamReservations;
-            bookingsWithReservations[reservation.StartTime] = currentBookingsAtSameTime;
+
+                var reservationsForUser = userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>());
+                if (reservationsForUser.Remove(reservation.StartTime))
+                {
+                    var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime,
+                            new TimeSlotReservations { OpenReservations = new HashSet<string>(), TeamReservations = new Dictionary<string, HashSet<string>>() }
+                        );
+                    var reservationsForTeam = currentBookingsAtSameTime.TeamReservations.GetValueOrDefault(reservation.TeamId, new HashSet<string>());
+                    if (reservationsForTeam.Remove(userId))
+                        return;
+                    currentBookingsAtSameTime.OpenReservations.Remove(userId);
+                }
+            }
+            finally
+            {
+                reservationLock.Release();
+            }
         }
 
-        public void AddOpenReservation(string userId, UserReservation reservation)
+        public async Task AddTeamReservation(string userId, UserReservation reservation)
         {
-            var reservationsForUser = userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>());
-            reservationsForUser.Add(reservation.StartTime, reservation);
-            userReservations[userId] = reservationsForUser;
+            await reservationLock.WaitAsync();
+            try
+            {
+                var reservationsForUser = userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>());
+                if (!reservationsForUser.TryAdd(reservation.StartTime, reservation))
+                    return;
+                userReservations[userId] = reservationsForUser;
 
-            var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime, new TimeSlotReservations { OpenReservations = new List<string>(), TeamReservations = new Dictionary<string, List<string>>() });
-            currentBookingsAtSameTime.OpenReservations.Add(userId);
-            bookingsWithReservations[reservation.StartTime] = currentBookingsAtSameTime;
+                var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime,
+                    new TimeSlotReservations { OpenReservations = new HashSet<string>(), TeamReservations = new Dictionary<string, HashSet<string>>() }
+                    );
+                var teamReservations = currentBookingsAtSameTime.TeamReservations.GetValueOrDefault(reservation.TeamId, new HashSet<string>());
+                teamReservations.Add(userId);
+                currentBookingsAtSameTime.TeamReservations[reservation.TeamId] = teamReservations;
+                bookingsWithReservations[reservation.StartTime] = currentBookingsAtSameTime;
+            }
+            finally
+            {
+                reservationLock.Release();
+            }
+        }
+
+        public async Task AddOpenReservation(string userId, UserReservation reservation)
+        {
+            await reservationLock.WaitAsync();
+            try
+            {
+                var reservationsForUser = userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>());
+                if (!reservationsForUser.TryAdd(reservation.StartTime, reservation))
+                    return;
+                userReservations[userId] = reservationsForUser;
+
+                var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime,
+                        new TimeSlotReservations { OpenReservations = new HashSet<string>(), TeamReservations = new Dictionary<string, HashSet<string>>() }
+                    );
+                currentBookingsAtSameTime.OpenReservations.Add(userId);
+                bookingsWithReservations[reservation.StartTime] = currentBookingsAtSameTime;
+            }
+            finally
+            {
+                reservationLock.Release();
+            }
         }
     }
 
@@ -218,7 +263,7 @@ namespace BookingApp.Data
         {
             var state = await authenticationStateProvider.GetAuthenticationStateAsync();
             var userId = (await userManager.GetUserAsync(state.User)).Id;
-            bookingStorage.AddOpenReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = "open" });
+            await bookingStorage.AddOpenReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = "open" });
             OnBookingsChanged();
         }
 
@@ -226,7 +271,7 @@ namespace BookingApp.Data
         {
             var state = await authenticationStateProvider.GetAuthenticationStateAsync();
             var userId = (await userManager.GetUserAsync(state.User)).Id;
-            bookingStorage.RemoveReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = "open" });
+            await bookingStorage.RemoveReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = "open" });
             OnBookingsChanged();
         }
 
@@ -234,7 +279,7 @@ namespace BookingApp.Data
         {
             var state = await authenticationStateProvider.GetAuthenticationStateAsync();
             var userId = (await userManager.GetUserAsync(state.User)).Id;
-            bookingStorage.AddReservation(userId, new UserReservation {StartTime = session.StartTime, TeamId = session.TeamId });
+            await bookingStorage.AddTeamReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId });
             OnBookingsChanged();
         }
 
@@ -242,7 +287,7 @@ namespace BookingApp.Data
         {
             var state = await authenticationStateProvider.GetAuthenticationStateAsync();
             var userId = (await userManager.GetUserAsync(state.User)).Id;
-            bookingStorage.RemoveReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId});
+            await bookingStorage.RemoveReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId });
             OnBookingsChanged();
         }
 
@@ -280,7 +325,7 @@ namespace BookingApp.Data
 
         public Task<IEnumerable<BookedTimeSlot>> GetAllReservations(DateTime from, TimeSpan duration)
         {
-            return Task.FromResult(bookingStorage.GetAllReservationsBetween(from, duration));
+            return bookingStorage.GetAllReservationsBetweenAsync(from, duration);
         }
 
         public delegate void BookingsChangedDelegate();
@@ -294,9 +339,9 @@ namespace BookingApp.Data
 
         public TeamService()
         {
-            teams.Add("1", new Team { Duration = TimeSpan.FromMinutes(90), Id = "1", Name = "Beginner", Size = 10});
-            teams.Add("2", new Team { Duration = TimeSpan.FromMinutes(90), Id = "2", Name = "Intermediate", Size = 10});
-            teams.Add("3", new Team { Duration = TimeSpan.FromMinutes(90), Id = "3", Name = "Elite", Size = 10});
+            teams.Add("1", new Team { Duration = TimeSpan.FromMinutes(90), Id = "1", Name = "Beginner", Size = 10 });
+            teams.Add("2", new Team { Duration = TimeSpan.FromMinutes(90), Id = "2", Name = "Intermediate", Size = 10 });
+            teams.Add("3", new Team { Duration = TimeSpan.FromMinutes(90), Id = "3", Name = "Elite", Size = 10 });
         }
 
         public Team GetTeam(string id)

@@ -22,7 +22,6 @@ namespace BookingApp.Data
             this.userManager = userManager;
             this.roleManager = roleManager;
             this.authenticationStateProvider = authenticationStateProvider;
-            Console.WriteLine("New USR MGR!");
         }
 
         private readonly UserManager<IdentityUser> userManager;
