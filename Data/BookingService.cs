@@ -127,10 +127,16 @@ namespace BookingApp.Data
         public string TeamId { get; set; }
     }
 
-    public class BookedTimeSlot
+    public class TimeSlotReservations
     {
         public List<string> OpenReservations { get; set; }
         public Dictionary<string, List<string>> TeamReservations { get; set; }
+    }
+
+    public class BookedTimeSlot
+    {
+        public DateTime StartTime { get; set; }
+        public TimeSlotReservations Reservations { get; set; }
     }
 
 
@@ -138,7 +144,7 @@ namespace BookingApp.Data
     {
         private readonly Dictionary<string, Dictionary<DateTime, UserReservation>> userReservations = new Dictionary<string, Dictionary<DateTime,UserReservation>>();
 
-        private readonly Dictionary<DateTime, BookedTimeSlot> bookingsWithReservations = new Dictionary<DateTime, BookedTimeSlot>();
+        private readonly Dictionary<DateTime, TimeSlotReservations> bookingsWithReservations = new Dictionary<DateTime, TimeSlotReservations>();
 
 
         public IEnumerable<UserReservation> GetReservationsFor(string userId)
@@ -146,9 +152,27 @@ namespace BookingApp.Data
             return userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>()).Values;
         }
 
+        private bool IsTimeWithin(DateTime slot, DateTime from, TimeSpan duration)
+        {
+            return slot >= from && slot<= from + duration;
+        }
+
         public IEnumerable<BookedTimeSlot> GetAllReservationsBetween(DateTime from, TimeSpan duration)
         {
-            return bookingsWithReservations.Where(kvpair => kvpair.Key >= from && kvpair.Key <= from + duration).Select(kvpair => kvpair.Value);
+            return bookingsWithReservations.Where(bookedTimeSlot => IsTimeWithin(bookedTimeSlot.Key, from, duration)).Select(bookedTimeSlot => new BookedTimeSlot { Reservations = bookedTimeSlot.Value, StartTime = bookedTimeSlot.Key}).ToList();
+        }
+
+        public void RemoveReservation(string userId, UserReservation reservation)
+        {
+            var reservationsForUser = userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>());
+            if (reservationsForUser.Remove(reservation.StartTime))
+            {
+                var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime, new TimeSlotReservations { OpenReservations = new List<string>(), TeamReservations = new Dictionary<string, List<string>>() });
+                var reservationsForTeam = currentBookingsAtSameTime.TeamReservations.GetValueOrDefault(reservation.TeamId, new List<string>());
+                if (reservationsForTeam.Remove(userId))
+                    return;
+                currentBookingsAtSameTime.OpenReservations.Remove(userId);
+            }
         }
 
         public void AddReservation(string userId, UserReservation reservation)
@@ -157,8 +181,21 @@ namespace BookingApp.Data
             reservationsForUser.Add(reservation.StartTime, reservation);
             userReservations[userId] = reservationsForUser;
 
-            var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime, new BookedTimeSlot { OpenReservations = new List<string>(), TeamReservations = new Dictionary<string, List<string>>()});
-            currentBookingsAtSameTime.TeamReservations.GetValueOrDefault(reservation.TeamId, new List<string>()).Add(userId);
+            var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime, new TimeSlotReservations { OpenReservations = new List<string>(), TeamReservations = new Dictionary<string, List<string>>()});
+            var teamReservations = currentBookingsAtSameTime.TeamReservations.GetValueOrDefault(reservation.TeamId, new List<string>());
+            teamReservations.Add(userId);
+            currentBookingsAtSameTime.TeamReservations[reservation.TeamId] = teamReservations;
+            bookingsWithReservations[reservation.StartTime] = currentBookingsAtSameTime;
+        }
+
+        public void AddOpenReservation(string userId, UserReservation reservation)
+        {
+            var reservationsForUser = userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>());
+            reservationsForUser.Add(reservation.StartTime, reservation);
+            userReservations[userId] = reservationsForUser;
+
+            var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime, new TimeSlotReservations { OpenReservations = new List<string>(), TeamReservations = new Dictionary<string, List<string>>() });
+            currentBookingsAtSameTime.OpenReservations.Add(userId);
             bookingsWithReservations[reservation.StartTime] = currentBookingsAtSameTime;
         }
     }
@@ -172,16 +209,25 @@ namespace BookingApp.Data
 
         public BookingService(AuthenticationStateProvider authenticationStateProvider, UserManager<IdentityUser> userManager, BookingStorage bookingStorage)
         {
-            Console.WriteLine("New booking service!");
             this.authenticationStateProvider = authenticationStateProvider;
             this.userManager = userManager;
             this.bookingStorage = bookingStorage;
         }
 
-
-        public void MakeOpenReservation(HourlyBookingTimeSlot timeSlot)
+        public async Task MakeOpenReservation(OpenSession session)
         {
+            var state = await authenticationStateProvider.GetAuthenticationStateAsync();
+            var userId = (await userManager.GetUserAsync(state.User)).Id;
+            bookingStorage.AddOpenReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = "open" });
+            OnBookingsChanged();
+        }
 
+        public async Task CancelOpenReservation(OpenSession session)
+        {
+            var state = await authenticationStateProvider.GetAuthenticationStateAsync();
+            var userId = (await userManager.GetUserAsync(state.User)).Id;
+            bookingStorage.RemoveReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = "open" });
+            OnBookingsChanged();
         }
 
         public async Task MakeTeamReservation(TeamSession session)
@@ -189,6 +235,15 @@ namespace BookingApp.Data
             var state = await authenticationStateProvider.GetAuthenticationStateAsync();
             var userId = (await userManager.GetUserAsync(state.User)).Id;
             bookingStorage.AddReservation(userId, new UserReservation {StartTime = session.StartTime, TeamId = session.TeamId });
+            OnBookingsChanged();
+        }
+
+        public async Task CancelTeamReservation(TeamSession session)
+        {
+            var state = await authenticationStateProvider.GetAuthenticationStateAsync();
+            var userId = (await userManager.GetUserAsync(state.User)).Id;
+            bookingStorage.RemoveReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId});
+            OnBookingsChanged();
         }
 
         public async Task<IEnumerable<UserReservation>> GetLoggedOnUserReservations()
@@ -209,16 +264,28 @@ namespace BookingApp.Data
             }
         };
 
+        private readonly OpenSessionGenerator openSessionGenerator = new OpenSessionGenerator();
 
-        public Task<BookingSchedule> GetBookingSchedule(DateTime from, TimeSpan duration)
+        public Task<IEnumerable<OpenSession>> GetOpenSessions(DateTime from, TimeSpan duration)
         {
-            // get all the team slots based on the time interval and active schedule
-            var res = new BookingSchedule();
-            res.TeamSlots = new TeamSessionGenerator(ActiveSchedule.ScheduledTeams).GetTeamSlots(from, duration).Select(e => new TeamBookingTimeSlot { Session = e, Reservations = Enumerable.Empty<string>() }) ;
-            res.OpenSlots = new OpenSessionGenerator().GetHourlyOpenSessions(from, duration).Select(e => new HourlyBookingTimeSlot { Session = e, Reservations = Enumerable.Empty<string>() });
-
-            return Task.FromResult(res);
+            return Task.FromResult(openSessionGenerator.GetHourlyOpenSessions(from, duration));
         }
+
+        private readonly TeamSessionGenerator teamSessionGenerator = new TeamSessionGenerator(ActiveSchedule.ScheduledTeams);
+
+        public Task<IEnumerable<TeamSession>> GetTeamSessions(DateTime from, TimeSpan duration)
+        {
+            return Task.FromResult(teamSessionGenerator.GetTeamSlots(from, duration));
+        }
+
+        public Task<IEnumerable<BookedTimeSlot>> GetAllReservations(DateTime from, TimeSpan duration)
+        {
+            return Task.FromResult(bookingStorage.GetAllReservationsBetween(from, duration));
+        }
+
+        public delegate void BookingsChangedDelegate();
+
+        public static event BookingsChangedDelegate OnBookingsChanged;
     }
 
     public class TeamService
