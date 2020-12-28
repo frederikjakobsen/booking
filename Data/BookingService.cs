@@ -1,3 +1,4 @@
+using BookingApp.Areas.Identity;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using System;
@@ -178,8 +179,6 @@ namespace BookingApp.Data
             await reservationLock.WaitAsync();
             try
             {
-
-
                 var reservationsForUser = userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>());
                 if (reservationsForUser.Remove(reservation.StartTime))
                 {
@@ -250,9 +249,9 @@ namespace BookingApp.Data
 
         private BookingStorage bookingStorage;
         private readonly AuthenticationStateProvider authenticationStateProvider;
-        private readonly UserManager<IdentityUser> userManager;
+        private readonly UserManager<ApplicationUser> userManager;
 
-        public BookingService(AuthenticationStateProvider authenticationStateProvider, UserManager<IdentityUser> userManager, BookingStorage bookingStorage)
+        public BookingService(AuthenticationStateProvider authenticationStateProvider, UserManager<ApplicationUser> userManager, BookingStorage bookingStorage)
         {
             this.authenticationStateProvider = authenticationStateProvider;
             this.userManager = userManager;

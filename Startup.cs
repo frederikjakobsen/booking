@@ -36,12 +36,13 @@ namespace BookingApp
             });
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlite ("DataSource=app.db"));
-            services.AddDefaultIdentity<IdentityUser>()
+            services.AddDefaultIdentity<ApplicationUser>()
                 .AddRoles<IdentityRole>()
-                .AddEntityFrameworkStores<ApplicationDbContext>();
+                .AddEntityFrameworkStores<ApplicationDbContext>()
+                .AddClaimsPrincipalFactory<AppClaimsPrincipalFactory>();
             services.AddRazorPages();
             services.AddServerSideBlazor();
-            services.AddScoped<AuthenticationStateProvider, RevalidatingIdentityAuthenticationStateProvider<IdentityUser>>();
+            services.AddScoped<AuthenticationStateProvider, RevalidatingIdentityAuthenticationStateProvider<ApplicationUser>>();
             services.AddScoped<BookingService>();
             services.AddSingleton<TeamService>();
             services.AddSingleton<BookingStorage>();

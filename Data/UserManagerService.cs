@@ -1,3 +1,4 @@
+using BookingApp.Areas.Identity;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using System;
@@ -17,20 +18,20 @@ namespace BookingApp.Data
     public class UserManagerService
     {
 
-        public UserManagerService(UserManager<IdentityUser> userManager, RoleManager<IdentityRole> roleManager, AuthenticationStateProvider authenticationStateProvider)
+        public UserManagerService(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, AuthenticationStateProvider authenticationStateProvider)
         {
             this.userManager = userManager;
             this.roleManager = roleManager;
             this.authenticationStateProvider = authenticationStateProvider;
         }
 
-        private readonly UserManager<IdentityUser> userManager;
+        private readonly UserManager<ApplicationUser> userManager;
         private readonly RoleManager<IdentityRole> roleManager;
         private readonly AuthenticationStateProvider authenticationStateProvider;
 
-        private static async Task<BookingUser> InitUser(UserManager<IdentityUser> userManager, IdentityUser user)
+        private static async Task<BookingUser> InitUser(UserManager<ApplicationUser> userManager, ApplicationUser user)
         {
-            return new BookingUser { OwnerId = user.Id, Name = user.UserName, Approved = await userManager.IsInRoleAsync(user, "approved") };
+            return new BookingUser { OwnerId = user.Id, Name = user.Name, Approved = await userManager.IsInRoleAsync(user, "approved") };
         }
 
         public async Task<IEnumerable<BookingUser>> GetUsers()
@@ -52,7 +53,7 @@ namespace BookingApp.Data
             await EnsureNoRole(idUser, "approved");
         }
 
-        private async Task EnsureNoRole(IdentityUser user, string role)
+        private async Task EnsureNoRole(ApplicationUser user, string role)
         {
             if (!await roleManager.RoleExistsAsync(role))
             {
@@ -64,7 +65,7 @@ namespace BookingApp.Data
                 throw new Exception("Failed to remove role");
         }
 
-        private async Task EnsureRole(IdentityUser user, string role)
+        private async Task EnsureRole(ApplicationUser user, string role)
         {
             IdentityResult IR = null;
 
