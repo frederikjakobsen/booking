@@ -266,12 +266,17 @@ namespace BookingApp.Data
             OnBookingsChanged();
         }
 
-        public async Task CancelOpenReservation(OpenSession session)
+        public async Task CancelOpenReservationAt(DateTime starttime)
         {
             var state = await authenticationStateProvider.GetAuthenticationStateAsync();
             var userId = (await userManager.GetUserAsync(state.User)).Id;
-            await bookingStorage.RemoveReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = "open" });
+            await bookingStorage.RemoveReservation(userId, new UserReservation { StartTime = starttime, TeamId = "open" });
             OnBookingsChanged();
+        }
+
+        public async Task CancelOpenReservation(OpenSession session)
+        {
+            await CancelOpenReservationAt(session.StartTime);
         }
 
         public async Task MakeTeamReservation(TeamSession session)
@@ -279,6 +284,14 @@ namespace BookingApp.Data
             var state = await authenticationStateProvider.GetAuthenticationStateAsync();
             var userId = (await userManager.GetUserAsync(state.User)).Id;
             await bookingStorage.AddTeamReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId });
+            OnBookingsChanged();
+        }
+
+        public async Task CancelUserReservation(UserReservation reservation)
+        {
+            var state = await authenticationStateProvider.GetAuthenticationStateAsync();
+            var userId = (await userManager.GetUserAsync(state.User)).Id;
+            await bookingStorage.RemoveReservation(userId, reservation);
             OnBookingsChanged();
         }
 
@@ -329,7 +342,7 @@ namespace BookingApp.Data
 
         public delegate void BookingsChangedDelegate();
 
-        public static event BookingsChangedDelegate OnBookingsChanged;
+        public static event BookingsChangedDelegate OnBookingsChanged = delegate { };
     }
 
     public class TeamService

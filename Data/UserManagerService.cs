@@ -12,6 +12,8 @@ namespace BookingApp.Data
     {
         public string OwnerId { get; set; }
         public string Name { get; set; }
+
+        public string Email { get; set; }
         public bool Approved { get; set; }
     }
 
@@ -31,7 +33,7 @@ namespace BookingApp.Data
 
         private static async Task<BookingUser> InitUser(UserManager<ApplicationUser> userManager, ApplicationUser user)
         {
-            return new BookingUser { OwnerId = user.Id, Name = user.Name, Approved = await userManager.IsInRoleAsync(user, "approved") };
+            return new BookingUser { OwnerId = user.Id, Name = user.Name, Email = user.Email, Approved = await userManager.IsInRoleAsync(user, "approved") };
         }
 
         public async Task<IEnumerable<BookingUser>> GetUsers()

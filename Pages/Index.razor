@@ -1,5 +1,61 @@
 ﻿@page "/"
+@using System.Globalization
+@inject BookingService BookingService
+@using BookingApp.Areas.Identity
+@inject TeamService TeamService
+@attribute [Authorize]
 
-<h1>Hello, there!</h1>
+<p>
+    <a href="@openSessionLink">Book open session</a>
+</p>
+<p>
+    <a href="@teamSessionLink">Book team session</a>
+</p>
 
-<LoginDisplay />
+     @if (userReservations!=null && userReservations.Any())
+     {
+<h3>Active bookings</h3>
+         <table>
+             @foreach (var reservation in userReservations)
+             {
+                 <tr>
+                 <td>
+                     @reservation.StartTime
+                 </td>
+                 <td>
+                     @PrintTeam(reservation)
+                 </td>
+                 <td>
+                     <button @onclick="()=>CancelOpenBooking(reservation)">Cancel booking</button>
+                 </td>
+             </tr>
+             }
+             
+         </table>
+     }
+
+@code
+{
+    private readonly string openSessionLink = $"/opensessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+    private readonly string teamSessionLink = $"/teamsessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+
+    private List<UserReservation> userReservations = null;
+
+    protected async override Task OnInitializedAsync() 
+    {
+        userReservations = (await BookingService.GetLoggedOnUserReservations()).ToList();
+    }
+
+    private async Task CancelOpenBooking(UserReservation reservation)
+    {
+        await BookingService.CancelUserReservation(reservation);
+        userReservations.Remove(reservation);
+    }
+
+    private string PrintTeam(UserReservation reservation)
+    {
+        if (reservation.TeamId == "open")
+            return "open";
+        return TeamService.GetTeam(reservation.TeamId).Name;
+    }
+}

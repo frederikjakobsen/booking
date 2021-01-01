@@ -1,0 +1,106 @@
+﻿@page "/opensessions/{Date:datetime}"
+@inject BookingService BookingService
+@inject NavigationManager NavigationManager
+@attribute [Authorize]
+@implements IDisposable
+@using System.Globalization
+
+<h1>@Date.DayOfWeek @Date.Day @Date.ToString("MMMM", CultureInfo.InvariantCulture)</h1>
+
+@if (openSlots == null)
+{
+<p>Loading sessions..</p>
+}
+else
+{
+<table>
+<tr>
+    <th>Time</th>
+    <th>Available spots</th>
+    <th></th>
+</tr>
+
+@foreach (var open in openSlots)
+{
+    var visibilityClass = "";
+    if (open.StartTime < DateTime.Now) {
+        visibilityClass = "text-muted";
+    }
+        <tr class="@visibilityClass">
+        <td>@open.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture)</td>
+        <td><center>@(open.Size - GetReservations(open).Count())/@(open.Size)</center></td>
+        <td>@if (ownReservations.Contains(open.StartTime)) { <button @onclick="()=>CancelOpenBooking(open)">Cancel booking</button> } else { <button @onclick="()=>BookOpen(open)">Book</button> } </td>
+    </tr>
+}
+</table>
+}
+
+
+@code {
+    private HashSet<DateTime> ownReservations = new HashSet<DateTime>();
+
+    private IEnumerable<BookedTimeSlot> reservations = null;
+    private IEnumerable<OpenSession> openSlots = null;
+
+    [Parameter]
+    public DateTime Date { get; set; }
+
+    private DateTime RoundToDays(DateTime date)
+    {
+        return new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, date.Kind);
+    }
+
+    protected async override Task OnInitializedAsync()
+    {
+        Date = RoundToDays(Date);
+        if (Date < DateTime.Today)
+            NavigationManager.NavigateTo($"/opensessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}", false);
+
+        var myBookings = await BookingService.GetLoggedOnUserReservations();
+
+        var openBookings = myBookings.Where(e => e.TeamId == "open");
+        foreach(var openBooking in openBookings)
+        {
+            ownReservations.Add(openBooking.StartTime);
+        }
+
+        reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
+        openSlots = await BookingService.GetOpenSessions(Date, TimeSpan.FromDays(1));
+
+        BookingService.OnBookingsChanged += this.BookingsChanged;
+    }
+
+    private IEnumerable<string> GetReservations(OpenSession session)
+    {
+        var res = reservations.Where(res => res.StartTime == session.StartTime);
+        if (res.Any())
+        {
+            return res.Select(e => e.Reservations.OpenReservations).Single();
+        }
+        return Enumerable.Empty<string>();
+    }
+
+    private async Task BookOpen(OpenSession sessionToBook)
+    {
+        await BookingService.MakeOpenReservation(sessionToBook);
+        ownReservations.Add(sessionToBook.StartTime);
+    }
+
+    private async Task CancelOpenBooking(OpenSession sessionToBook)
+    {
+        await BookingService.CancelOpenReservation(sessionToBook);
+        ownReservations.Remove(sessionToBook.StartTime);
+    }
+
+    private async void BookingsChanged()
+    {
+        reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
+        await InvokeAsync(() => StateHasChanged());
+    }
+
+    public void Dispose()
+    {
+        BookingService.OnBookingsChanged -= this.BookingsChanged;
+    }
+    
+}

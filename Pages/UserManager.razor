@@ -19,6 +19,7 @@
   {
       <tr>
             <td>@user.Name</td>
+            <td>@user.Email</td>
             <td>@if (!user.Approved) {
             <button @onclick="()=>ApproveUser(user)">Approve</button>
         }

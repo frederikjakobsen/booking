@@ -8,7 +8,7 @@
 
 @if (teamSlotsToday == null)
 {
-<p>Loading bookings..</p>
+<p>Loading sessions..</p>
 }
 else
 {
@@ -22,9 +22,13 @@ else
 
 @foreach (var open in openSlotsToday)
 {
-    <tr>
+    var visibilityClass = "";
+    if (open.StartTime < DateTime.Now) {
+        visibilityClass = "text-muted";
+    }
+        <tr class="@visibilityClass">
         <td>@open.StartTime</td>
-        <td><center>@(open.Size - GetReservations(open).Count())</center></td>
+        <td><center>@(open.Size - GetReservations(open).Count())/@(open.Size)</center></td>
         <td>@if (myOpenBookings.Contains(open.StartTime)) { <button @onclick="()=>CancelOpenBooking(open)">Cancel booking</button> } else { <button @onclick="()=>BookOpen(open)">Book</button> } </td>
     </tr>
 }
