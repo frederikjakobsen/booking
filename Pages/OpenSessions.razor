@@ -5,7 +5,7 @@
 @implements IDisposable
 @using System.Globalization
 
-<h1>@Date.DayOfWeek @Date.Day @Date.ToString("MMMM", CultureInfo.InvariantCulture)</h1>
+<h1>Open session booking</h1>
 
 @if (openSlots == null)
 {
@@ -13,22 +13,27 @@
 }
 else
 {
-<table>
+<table style="min-width:300px;">
 <tr>
-    <th>Time</th>
-    <th>Available spots</th>
-    <th></th>
+    <th colspan="3" class="text-center">@Date.ToString("MMMM", CultureInfo.InvariantCulture)</th>
+</tr>
+<tr>
+    <th>@if (previousDayUrl !=null) {<a href="@previousDayUrl">earlier</a>} else {<span class="text-muted">earlier</span>}</th>
+    <th class="text-center">@Date.Day</th>
+    <th class="text-right"><a href="@nextDayUrl">later</a></th>
+</tr>
+<tr>
+    <th colspan="3" class="text-center">@Date.DayOfWeek</th>
 </tr>
 
 @foreach (var open in openSlots)
 {
-    var visibilityClass = "";
     if (open.StartTime < DateTime.Now) {
-        visibilityClass = "text-muted";
+        continue;
     }
-        <tr class="@visibilityClass">
-        <td>@open.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture)</td>
-        <td><center>@(open.Size - GetReservations(open).Count())/@(open.Size)</center></td>
+    <tr>
+        <td class="text-center">@(open.Size - GetReservations(open).Count())/@(open.Size)</td>
+        <td class="text-center">@open.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture)</td>
         <td>@if (ownReservations.Contains(open.StartTime)) { <button @onclick="()=>CancelOpenBooking(open)">Cancel booking</button> } else { <button @onclick="()=>BookOpen(open)">Book</button> } </td>
     </tr>
 }
@@ -37,6 +42,8 @@ else
 
 
 @code {
+    private string nextDayUrl = null;
+    private string previousDayUrl = null;
     private HashSet<DateTime> ownReservations = new HashSet<DateTime>();
 
     private IEnumerable<BookedTimeSlot> reservations = null;
@@ -50,12 +57,23 @@ else
         return new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, date.Kind);
     }
 
-    protected async override Task OnInitializedAsync()
+    protected async override Task OnParametersSetAsync()
     {
         Date = RoundToDays(Date);
         if (Date < DateTime.Today)
             NavigationManager.NavigateTo($"/opensessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}", false);
 
+        nextDayUrl = $"/opensessions/{(Date+TimeSpan.FromDays(1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+        if (Date > DateTime.Today)
+            previousDayUrl = $"/opensessions/{(Date - TimeSpan.FromDays(1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+        else
+            previousDayUrl = null;
+        reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
+        openSlots = await BookingService.GetOpenSessions(Date, TimeSpan.FromDays(1));
+    }
+
+    protected async override Task OnInitializedAsync()
+    {
         var myBookings = await BookingService.GetLoggedOnUserReservations();
 
         var openBookings = myBookings.Where(e => e.TeamId == "open");
@@ -63,9 +81,6 @@ else
         {
             ownReservations.Add(openBooking.StartTime);
         }
-
-        reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
-        openSlots = await BookingService.GetOpenSessions(Date, TimeSpan.FromDays(1));
 
         BookingService.OnBookingsChanged += this.BookingsChanged;
     }
