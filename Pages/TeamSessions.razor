@@ -6,7 +6,8 @@
 @implements IDisposable
 @using System.Globalization
 
-<h1>@Date.DayOfWeek @Date.Day @Date.ToString("MMMM", CultureInfo.InvariantCulture)</h1>
+<h2>Team session booking</h2>
+
 
 @if (teamSessions == null)
 {
@@ -14,21 +15,25 @@
 }
 else
 {
-<table>
+<table style="min-width:400px;">
 <tr>
-    <th>Time</th>
-    <th>Name</th>
-    <th>Available spots</th>
-    <th></th>
+    <th colspan="4" class="text-center">@Date.ToString("MMMM", CultureInfo.InvariantCulture)</th>
+</tr>
+<tr>
+    <th>@if (previousDayUrl !=null) {<a href="@previousDayUrl">earlier</a>} else {<span class="text-muted">earlier</span>}</th>
+    <th colspan="2" class="text-center">@Date.Day</th>
+    <th class="text-right"><a href="@nextDayUrl">later</a></th>
+</tr>
+<tr>
+    <th colspan="4" class="text-center">@Date.DayOfWeek</th>
 </tr>
 
 @foreach (var teamSession in teamSessions)
 {
-    var visibilityClass = "";
     if (teamSession.StartTime < DateTime.Now) {
-        visibilityClass = "text-muted";
+        continue;
     }
-        <tr class="@visibilityClass">
+        <tr>
         <td>@teamSession.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture)</td>
         <td>@TeamService.GetTeam(teamSession.TeamId).Name</td>
         <td><center>@(TeamService.GetTeam(teamSession.TeamId).Size - GetReservations(teamSession).Count())</center></td>
@@ -40,8 +45,9 @@ else
 
 
 @code {
+    private string nextDayUrl = null;
+    private string previousDayUrl = null;
     private Dictionary<DateTime, string> ownReservations = new Dictionary<DateTime, string>();
-
     private IEnumerable<BookedTimeSlot> reservations = null;
     private IEnumerable<TeamSession> teamSessions = Enumerable.Empty<TeamSession>();
 
@@ -53,27 +59,73 @@ else
         return new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, date.Kind);
     }
 
-    protected async override Task OnInitializedAsync()
+    private async Task SetNextTeamSessionDate()
     {
-        Date = RoundToDays(Date);
-        if (Date < DateTime.Today)
-            NavigationManager.NavigateTo($"/opensessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}", false);
-
-        var myBookings = await BookingService.GetLoggedOnUserReservations();
-
-        var teamBookings = myBookings.Where(e => e.TeamId != "open");
-        foreach(var teamBooking in teamBookings)
-        {
-            ownReservations.Add(teamBooking.StartTime, teamBooking.TeamId);
-        }
+        var teamsessiondate = Date;
+        teamSessions = await BookingService.GetTeamSessions(Date, TimeSpan.FromDays(1));
 
         while(!teamSessions.Any())
         {
-            reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
-            teamSessions = await BookingService.GetTeamSessions(Date, TimeSpan.FromDays(1));
-            Date += TimeSpan.FromDays(1);
+            teamsessiondate += TimeSpan.FromDays(1);
+            teamSessions = await BookingService.GetTeamSessions(teamsessiondate, TimeSpan.FromDays(1));
         }
+        Date = teamsessiondate;
+    }
 
+    private async Task<DateTime> GetPreviousTeamSessionDateBefore(DateTime date)
+    {
+        var teamsessiondate = date;
+
+        while (true)
+        {
+            teamsessiondate -= TimeSpan.FromDays(1);
+            if ((await BookingService.GetTeamSessions(teamsessiondate, TimeSpan.FromDays(1))).Any())
+                return teamsessiondate;
+        }
+    }
+
+    private async Task<DateTime> GetNextTeamSessionDateAfter(DateTime date)
+    {
+        var teamsessiondate = date;
+
+        while (true)
+        {
+            teamsessiondate += TimeSpan.FromDays(1);
+            if ((await BookingService.GetTeamSessions(teamsessiondate, TimeSpan.FromDays(1))).Any())
+                return teamsessiondate;
+        }
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        Date = RoundToDays(Date);
+        var inputDate = Date;
+        if (Date < DateTime.Today)
+            Date = DateTime.Today;
+
+        await SetNextTeamSessionDate();
+        if(Date!=inputDate)
+            NavigationManager.NavigateTo($"/teamsessions/{Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}", false);
+
+        nextDayUrl = $"/teamsessions/{(await GetNextTeamSessionDateAfter(Date)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+        if (Date > DateTime.Today)
+            previousDayUrl = $"/teamsessions/{(await GetPreviousTeamSessionDateBefore(inputDate)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+        else
+            previousDayUrl = null;
+
+        reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
+
+    }
+
+    protected async override Task OnInitializedAsync()
+    {
+        var ownBookings = await BookingService.GetLoggedOnUserReservations();
+
+        var ownTeamBookings = ownBookings.Where(e => e.TeamId != "open");
+        foreach(var teamBooking in ownTeamBookings)
+        {
+            ownReservations.Add(teamBooking.StartTime, teamBooking.TeamId);
+        }
         BookingService.OnBookingsChanged += this.BookingsChanged;
     }
 
