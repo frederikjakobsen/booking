@@ -5,7 +5,7 @@ VisualStudioVersion = 16.0.30621.155
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BookingApp", "BookingApp.csproj", "{B6DA63B1-1549-48BA-BDC4-2BD764F2D7C1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BookingAppTests", "..\BookingAppTests\BookingAppTests.csproj", "{ADE5E185-3B73-4366-AE2B-178F3BAE3731}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BookingAppTests", "..\BookingAppTests\BookingAppTests.csproj", "{ADE5E185-3B73-4366-AE2B-178F3BAE3731}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

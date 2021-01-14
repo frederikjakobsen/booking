@@ -7,39 +7,48 @@
 
 <h2>Open session booking</h2>
 
-@if (openSlots == null)
+@if (sessions == null)
 {
 <p>Loading sessions..</p>
 }
 else
 {
 <table style="min-width:300px;">
-<tr>
-    <th colspan="3" class="text-center">@Date.ToString("MMMM", CultureInfo.InvariantCulture)</th>
-</tr>
-<tr>
-    <th>@if (previousDayUrl !=null) {<a href="@previousDayUrl">earlier</a>} else {<span class="text-muted">earlier</span>}</th>
-    <th class="text-center">@Date.Day</th>
-    <th class="text-right"><a href="@nextDayUrl">later</a></th>
-</tr>
-<tr>
-    <th colspan="3" class="text-center">@Date.DayOfWeek</th>
-</tr>
-
-@foreach (var open in openSlots)
-{
-    if (open.StartTime < DateTime.Now) {
-        continue;
-    }
     <tr>
-        <td class="text-center">@(open.Size - GetReservations(open).Count())/@(open.Size)</td>
-        <td class="text-center">@open.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture)</td>
-        <td>@if (ownReservations.Contains(open.StartTime)) { <button @onclick="()=>CancelOpenBooking(open)">Cancel booking</button> } else { <button @onclick="()=>BookOpen(open)">Book</button> } </td>
+        <th colspan="3" class="text-center">@Date.ToString("MMMM", CultureInfo.InvariantCulture)</th>
     </tr>
-}
+    <tr>
+        <th>
+            @if (previousDayUrl != null)
+                {<a href="@previousDayUrl">earlier</a>}
+                else
+                {<span class="text-muted">earlier</span>}
+        </th>
+        <th class="text-center">@Date.Day</th>
+        <th class="text-right"><a href="@nextDayUrl">later</a></th>
+    </tr>
+    <tr>
+        <th colspan="3" class="text-center">@Date.DayOfWeek</th>
+    </tr>
+
+    @foreach (var open in sessions)
+        {
+    <tr>
+        <td class="text-center"><button @onclick="()=>ToggleReservationsViewFor(open)">@open.Available/@open.Size</button></td>
+        <td class="text-center">@open.StartTime</td>
+        <td>
+            <button @onclick="()=>open.ToggleBookingState()">@open.BookingStateToggleText</button>
+        </td>
+    </tr>
+    @if (selectedSession == open.Generator)
+            {
+    <tr>
+        <td colspan="4"><SessionInfo userIds=open.Reservations /></td>
+    </tr>
+    }
+    }
 </table>
 }
-
 
 @code {
     private string nextDayUrl = null;
@@ -47,15 +56,44 @@ else
     private HashSet<DateTime> ownReservations = new HashSet<DateTime>();
 
     private IEnumerable<BookedTimeSlot> reservations = null;
-    private IEnumerable<OpenSession> openSlots = null;
 
     [Parameter]
     public DateTime Date { get; set; }
+
+    private IEnumerable<SessionUiItem> sessions = null;
+
+    private OpenSession selectedSession = null;
+
+    private void ToggleReservationsViewFor(SessionUiItem item)
+    {
+        if (item.Generator == selectedSession)
+            selectedSession = null;
+        else
+            selectedSession = item.Generator;
+        StateHasChanged();
+    }
+
+    public delegate Task BookingStateToggler();
+
+    class SessionUiItem
+    {
+        public int Available { get; set; }
+        public int Size { get; set; }
+        public bool ShowReservations { get; set; } = false;
+        public IEnumerable<string> Reservations;
+        public string StartTime { get; set; }
+        public BookingStateToggler ToggleBookingState;
+    public string BookingStateToggleText { get; set; }
+        public const string BookingStateOnText = "Cancel booking";
+        public const string BookingStateOffText = "Book";
+        public OpenSession Generator;
+    }
 
     private DateTime RoundToDays(DateTime date)
     {
         return new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, date.Kind);
     }
+
 
     protected async override Task OnParametersSetAsync()
     {
@@ -63,13 +101,32 @@ else
         if (Date < DateTime.Today)
             NavigationManager.NavigateTo($"/opensessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}", false);
 
-        nextDayUrl = $"/opensessions/{(Date+TimeSpan.FromDays(1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+        nextDayUrl = $"/opensessions/{(Date + TimeSpan.FromDays(1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
         if (Date > DateTime.Today)
             previousDayUrl = $"/opensessions/{(Date - TimeSpan.FromDays(1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
         else
             previousDayUrl = null;
         reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
-        openSlots = await BookingService.GetOpenSessions(Date, TimeSpan.FromDays(1));
+        var openSlots = await BookingService.GetOpenSessions(Date, TimeSpan.FromDays(1));
+
+        sessions = openSlots.Where(e => e.StartTime >= DateTime.Now).Select(e =>
+        {
+            var sessionReservations = GetReservations(e);
+            var isBooked = ownReservations.Contains(e.StartTime);
+            BookingStateToggler toggleState = async () => await BookOpen(e);
+            if (isBooked)
+                toggleState = async () => await CancelOpenBooking(e);
+            return new SessionUiItem
+            {
+                Available = e.Size - sessionReservations.Count(),
+                StartTime = e.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture),
+                BookingStateToggleText = isBooked ? SessionUiItem.BookingStateOnText : SessionUiItem.BookingStateOffText,
+                ToggleBookingState = toggleState,
+                Reservations = sessionReservations,
+                Size = e.Size,
+                Generator = e,
+            };
+        });
     }
 
     protected async override Task OnInitializedAsync()
@@ -77,7 +134,7 @@ else
         var myBookings = await BookingService.GetLoggedOnUserReservations();
 
         var openBookings = myBookings.Where(e => e.TeamId == "open");
-        foreach(var openBooking in openBookings)
+        foreach (var openBooking in openBookings)
         {
             ownReservations.Add(openBooking.StartTime);
         }
@@ -88,11 +145,7 @@ else
     private IEnumerable<string> GetReservations(OpenSession session)
     {
         var res = reservations.Where(res => res.StartTime == session.StartTime);
-        if (res.Any())
-        {
-            return res.Select(e => e.Reservations.OpenReservations).Single();
-        }
-        return Enumerable.Empty<string>();
+        return res.Select(e => e.Reservations.OpenReservations).DefaultIfEmpty(Enumerable.Empty<string>()).SingleOrDefault();
     }
 
     private async Task BookOpen(OpenSession sessionToBook)
@@ -117,5 +170,5 @@ else
     {
         BookingService.OnBookingsChanged -= this.BookingsChanged;
     }
-    
+
 }
