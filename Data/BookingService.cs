@@ -80,12 +80,14 @@ namespace BookingApp.Data
         public int Size { get; set; }
     }
 
+
+
     public class OpenSessionGenerator
     {
-
         private TimeSpan FirstSessionOfDay = TimeSpan.FromHours(6);
         private TimeSpan LastSessionOfDayEnd = TimeSpan.FromHours(23);
         private int OpenSessionSize = 24;
+
 
         public IEnumerable<OpenSession> GetHourlyOpenSessions(DateTime from, TimeSpan duration)
         {
@@ -103,6 +105,23 @@ namespace BookingApp.Data
             return res;
         }
     }
+
+    public class OccupiedTimeSlot
+    {
+        public TimeSlot TimeSlot { get; set; }
+        public int Occupants { get; set; }
+    }
+
+    public class TimeSlot
+    {
+        public DateTime StartTime;
+        public TimeSpan Duration;
+        public bool Overlaps(TimeSlot other)
+        {
+            return (StartTime < other.StartTime + other.Duration) && (StartTime + Duration > other.StartTime);
+        }
+    }
+
 
     public class TeamBookingTimeSlot
     {
@@ -248,14 +267,16 @@ namespace BookingApp.Data
     {
 
         private BookingStorage bookingStorage;
+        private readonly TeamService teamService;
         private readonly AuthenticationStateProvider authenticationStateProvider;
         private readonly UserManager<ApplicationUser> userManager;
 
-        public BookingService(AuthenticationStateProvider authenticationStateProvider, UserManager<ApplicationUser> userManager, BookingStorage bookingStorage)
+        public BookingService(AuthenticationStateProvider authenticationStateProvider, UserManager<ApplicationUser> userManager, BookingStorage bookingStorage, TeamService teamService)
         {
             this.authenticationStateProvider = authenticationStateProvider;
             this.userManager = userManager;
             this.bookingStorage = bookingStorage;
+            this.teamService = teamService;
         }
 
         public async Task MakeOpenReservation(OpenSession session)
@@ -323,9 +344,32 @@ namespace BookingApp.Data
 
         private readonly OpenSessionGenerator openSessionGenerator = new OpenSessionGenerator();
 
+        private IEnumerable<OccupiedTimeSlot> GetOccupiedSlots(DateTime from, TimeSpan duration)
+        {
+            var teamslots =teamSessionGenerator.GetTeamSlots(from, duration);
+            return teamslots.Select(e => {
+                var team = teamService.GetTeam(e.TeamId);
+                return new OccupiedTimeSlot { Occupants = team.Size, TimeSlot = new TimeSlot { StartTime=e.StartTime,Duration=team.Duration } };
+                });
+        }
+
         public Task<IEnumerable<OpenSession>> GetOpenSessions(DateTime from, TimeSpan duration)
         {
-            return Task.FromResult(openSessionGenerator.GetHourlyOpenSessions(from, duration));
+            var occupiedSlots = GetOccupiedSlots(from, duration);
+            var res = openSessionGenerator.GetHourlyOpenSessions(from, duration);
+            foreach (var occupiedSlot in occupiedSlots)
+            {
+                foreach (var session in res.Where(e => ConvertToTimeSlot(e).Overlaps(occupiedSlot.TimeSlot)))
+                {
+                    session.Size -= occupiedSlot.Occupants;
+                }
+            }
+            return Task.FromResult(res);
+        }
+
+        private TimeSlot ConvertToTimeSlot(OpenSession session)
+        {
+            return new TimeSlot { StartTime = session.StartTime, Duration = TimeSpan.FromHours(1) };
         }
 
         private readonly TeamSessionGenerator teamSessionGenerator = new TeamSessionGenerator(ActiveSchedule.ScheduledTeams);
