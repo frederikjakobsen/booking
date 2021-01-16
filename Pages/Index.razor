@@ -20,13 +20,13 @@
              {
                  <tr>
                  <td>
-                     @reservation.StartTime
+                     <a href=@CreateSessionBookingPageUrl(reservation)>@reservation.StartTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)</a>
                  </td>
                  <td>
                      @PrintTeam(reservation)
                  </td>
                  <td>
-                     <button @onclick="()=>CancelOpenBooking(reservation)">Cancel booking</button>
+                     <button @onclick="()=>CancelBooking(reservation)">Cancel booking</button>
                  </td>
              </tr>
              }
@@ -50,7 +50,7 @@
         userReservations = (await BookingService.GetLoggedOnUserReservations()).OrderBy(e=>e.StartTime).ToList();
     }
 
-    private async Task CancelOpenBooking(UserReservation reservation)
+    private async Task CancelBooking(UserReservation reservation)
     {
         await BookingService.CancelUserReservation(reservation);
         userReservations.Remove(reservation);
@@ -61,5 +61,13 @@
         if (reservation.TeamId == "open")
             return "open";
         return TeamService.GetTeam(reservation.TeamId).Name;
+    }
+
+    private string CreateSessionBookingPageUrl(UserReservation reservation)
+    {
+        if (reservation.TeamId == "open")
+            return $"/opensessions/{reservation.StartTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+        return $"/teamsessions/{reservation.StartTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+
     }
 }
