@@ -42,7 +42,7 @@ else
     @if (selectedSession == session.Generator)
             {
     <tr>
-        <td colspan="4"><SessionInfo userIds=session.Reservations /></td>
+        <td colspan="4"><SessionInfo userIds=session.Reservations Size=session.Size /></td>
     </tr>
     }
     }
@@ -196,7 +196,7 @@ else
         if (res.Any())
         {
             var teamReservations = res.Select(e => e.Reservations.TeamReservations).Single();
-            HashSet<string> reservationsForTeam = null;
+            List<string> reservationsForTeam = null;
             if (teamReservations.TryGetValue(session.TeamId, out reservationsForTeam))
             {
                 return reservationsForTeam;

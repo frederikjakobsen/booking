@@ -22,7 +22,11 @@ namespace BookingApp.Data
 
         public IEnumerable<string> GetUsers(IEnumerable<string> userIds)
         {
-            var res = userManager.Users.Where(user => userIds.Contains(user.Id)).Select(user => user.Name);
+            var res = new List<string>();
+            foreach(var userId in userIds)
+            {
+                res.Add(userManager.Users.First(user => user.Id == userId).Name);
+            }
             return res;
         }
     }

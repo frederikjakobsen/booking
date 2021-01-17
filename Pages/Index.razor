@@ -1,7 +1,6 @@
 ﻿@page "/"
 @using System.Globalization
 @inject BookingService BookingService
-@using BookingApp.Areas.Identity
 @inject TeamService TeamService
 @attribute [Authorize]
 
@@ -12,55 +11,92 @@
     <a href="@teamSessionLink">Book team session</a>
 </p>
 
-     @if (userReservations!=null && userReservations.Any())
-     {
+@if (reservationDetails.Any())
+{
 <h3>Active bookings</h3>
-         <table>
-             @foreach (var reservation in userReservations)
-             {
-                 <tr>
-                 <td>
-                     <a href=@CreateSessionBookingPageUrl(reservation)>@reservation.StartTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)</a>
-                 </td>
-                 <td>
-                     @PrintTeam(reservation)
-                 </td>
-                 <td>
-                     <button @onclick="()=>CancelBooking(reservation)">Cancel booking</button>
-                 </td>
-             </tr>
-             }
-             
-         </table>
-     }
-     else
-     {
-          <em>You have no active bookings</em>
-      }
+<table>
+    @foreach (var reservation in reservationDetails)
+        {
+    <tr>
+        <td>
+            <a href=@reservation.SessionBookingPageUrl>@reservation.StartTime</a>
+        </td>
+        <td>
+            @reservation.Team
+        </td>
+        <td>
+            @reservation.QueueText
+        </td>
+        <td>
+            <button @onclick="()=>CancelBooking(reservation)">Cancel booking</button>
+        </td>
+    </tr>
+    }
+
+</table>
+}
+else
+{
+<em>You have no active bookings</em>
+}
 
 @code
 {
     private readonly string openSessionLink = $"/opensessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
     private readonly string teamSessionLink = $"/teamsessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
 
-    private List<UserReservation> userReservations = null;
 
-    protected async override Task OnInitializedAsync() 
+    class OwnReservationUi
     {
-        userReservations = (await BookingService.GetLoggedOnUserReservations()).OrderBy(e=>e.StartTime).ToList();
+        public string Team { get; set; }
+        public string QueueText { get; set; }
+        public string SessionBookingPageUrl { get; set; }
+        public string StartTime { get; set; }
+        public UserReservation Generator { get; set; }
     }
 
-    private async Task CancelBooking(UserReservation reservation)
+    private List<OwnReservationUi> reservationDetails = new List<OwnReservationUi>();
+
+    protected async override Task OnInitializedAsync()
     {
-        await BookingService.CancelUserReservation(reservation);
-        userReservations.Remove(reservation);
+        var userReservations = (await BookingService.GetLoggedOnUserReservations()).OrderBy(e => e.StartTime).ToList();
+        foreach (var userres in userReservations)
+        {
+            var userPosition = await BookingService.GetLoggedOnUserPositionForReservedSession(userres);
+            var team = await GetSessionSize(userres);
+            var details = new OwnReservationUi();
+            details.Generator = userres;
+            details.QueueText = "";
+            details.SessionBookingPageUrl = CreateSessionBookingPageUrl(userres);
+            details.StartTime = userres.StartTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+            details.Team = team.Name;
+
+            if (userPosition >= team.Size)
+            {
+                var positionInQueue = userPosition - team.Size + 1;
+                details.QueueText = $"In queue ({positionInQueue})";
+            }
+            reservationDetails.Add(details);
+        }
     }
 
-    private string PrintTeam(UserReservation reservation)
+
+
+    private async Task<Team> GetSessionSize(UserReservation userReservation)
     {
-        if (reservation.TeamId == "open")
-            return "open";
-        return TeamService.GetTeam(reservation.TeamId).Name;
+        if (userReservation.TeamId == "open")
+        {
+            return new Team { Size = await BookingService.GetOpenSessionSize(userReservation.StartTime), Name = "open" };
+        }
+
+        return TeamService.GetTeam(userReservation.TeamId);
+    }
+
+    private async Task CancelBooking(OwnReservationUi reservation)
+    {
+        await BookingService.CancelUserReservation(reservation.Generator);
+
+        reservationDetails.Remove(reservation);
     }
 
     private string CreateSessionBookingPageUrl(UserReservation reservation)
