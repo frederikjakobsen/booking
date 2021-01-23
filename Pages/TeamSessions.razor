@@ -37,7 +37,7 @@ else
         <td>@session.StartTime</td>
         <td>@session.TeamName</td>
         <td class="text-center"><button @onclick="()=>ToggleReservationsViewFor(session)">@session.Available/@session.Size</button></td>
-        <td><button @onclick="()=>session.ToggleBookingState()">@session.BookingStateToggleText</button></td>
+        <td><button disabled=@session.Disabled @onclick="()=>session.ToggleBookingState()">@session.BookingStateToggleText</button></td>
     </tr>
     @if (selectedSession == session.Generator)
             {
@@ -79,12 +79,12 @@ else
     {
         public int Available { get; set; }
         public int Size { get; set; }
-        public bool ShowReservations { get; set; } = false;
+        public bool Disabled {get;set;} = false;
         public IEnumerable<string> Reservations;
         public string StartTime { get; set; }
         public string TeamName;
         public BookingStateToggler ToggleBookingState;
-    public string BookingStateToggleText { get; set; }
+        public string BookingStateToggleText { get; set; }
         public const string BookingStateOnText = "Cancel booking";
         public const string BookingStateOffText = "Book";
         public Object Generator;
@@ -161,10 +161,11 @@ else
             var team = TeamService.GetTeam(e.TeamId);
             var reservations = GetReservations(e);
             var isBooked = ownReservations.ContainsKey(e.StartTime);
+            
             BookingStateToggler toggleState = async () => await Book(e);
             if (isBooked)
                 toggleState = async () => await CancelBooking(e);
-            return new SessionUiItem
+            var res = new SessionUiItem
             {
                 Available = team.Size - reservations.Count(),
                 StartTime = e.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture),
@@ -175,6 +176,13 @@ else
                 Generator = e,
                 TeamName = team.Name
             };
+            int maxBookings = 0;
+            if (!isBooked && team.Limits.TryGetValue(TeamLimit.ActiveBookings, out maxBookings))
+            {
+                res.Disabled = ownReservations.Count(kv => kv.Key > DateTime.Now && kv.Value == team.Id) >= maxBookings;
+            }
+            
+            return res;
         });
     }
 
@@ -206,7 +214,7 @@ else
         return Enumerable.Empty<string>();
     }
 
-        private async Task Book(TeamSession sessionToBook)
+    private async Task Book(TeamSession sessionToBook)
     {
         await BookingService.MakeTeamReservation(sessionToBook);
         ownReservations[sessionToBook.StartTime] = sessionToBook.TeamId;

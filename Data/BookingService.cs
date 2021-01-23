@@ -302,6 +302,8 @@ namespace BookingApp.Data
         private readonly AuthenticationStateProvider authenticationStateProvider;
         private readonly UserManager<ApplicationUser> userManager;
 
+        private readonly SemaphoreSlim reservationLock = new SemaphoreSlim(1);
+
         public BookingService(AuthenticationStateProvider authenticationStateProvider, UserManager<ApplicationUser> userManager, BookingStorage bookingStorage, TeamService teamService)
         {
             this.authenticationStateProvider = authenticationStateProvider;
@@ -336,7 +338,27 @@ namespace BookingApp.Data
         {
             var state = await authenticationStateProvider.GetAuthenticationStateAsync();
             var userId = (await userManager.GetUserAsync(state.User)).Id;
-            await bookingStorage.AddTeamReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId });
+            int maxTeamReservations = 0;
+            if (teamService.GetTeam(session.TeamId).Limits.TryGetValue(TeamLimit.ActiveBookings, out maxTeamReservations))
+            {
+                await reservationLock.WaitAsync();
+                try
+                {
+                    var reservationsForUser = bookingStorage.GetReservationsFor(userId);
+                    if (reservationsForUser.Count(e => e.TeamId == session.TeamId && e.StartTime > DateTime.Now) < maxTeamReservations)
+                        await bookingStorage.AddTeamReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId });
+                    else
+                        return;
+                }
+                finally
+                {
+                    reservationLock.Release();
+                }
+            }
+            else 
+            {
+                await bookingStorage.AddTeamReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId });
+            }
             OnBookingsChanged();
         }
 
@@ -444,9 +466,35 @@ namespace BookingApp.Data
 
         public TeamService()
         {
-            teams.Add("1", new Team { Duration = TimeSpan.FromMinutes(90), Id = "1", Name = "Beginner", Size = 1 });
-            teams.Add("2", new Team { Duration = TimeSpan.FromMinutes(90), Id = "2", Name = "Intermediate", Size = 2 });
-            teams.Add("3", new Team { Duration = TimeSpan.FromMinutes(90), Id = "3", Name = "Elite", Size = 3 });
+            teams.Add("1", new Team
+            {
+                Duration = TimeSpan.FromMinutes(90),
+                Id = "1",
+                Name = "Beginner",
+                Size = 1,
+                Limits =
+                new Dictionary<TeamLimit, int>
+                {
+                    { TeamLimit.Size, 1},
+                    { TeamLimit.ActiveBookings, 2}
+                }
+            });
+            teams.Add("2", new Team { Duration = TimeSpan.FromMinutes(90), Id = "2", Name = "Intermediate", Size = 2,
+                Limits =
+                new Dictionary<TeamLimit, int>
+                {
+                    { TeamLimit.Size, 2},
+                    { TeamLimit.ActiveBookings, 2}
+                }
+            });
+            teams.Add("3", new Team { Duration = TimeSpan.FromMinutes(90), Id = "3", Name = "Elite", Size = 3,
+                Limits =
+                new Dictionary<TeamLimit, int>
+                {
+                    { TeamLimit.Size, 3},
+                    { TeamLimit.ActiveBookings, 2}
+                }
+            });
         }
 
         public Team GetTeam(string id)
@@ -460,6 +508,22 @@ namespace BookingApp.Data
         public string Id { get; set; }
         public string Name { get; set; }
         public TimeSpan Duration { get; set; }
+
+        // this could be seen as a limit, maybe set a list of limits for each team? this way we could also fit the open teams in here which have a special size limit..
         public int Size { get; set; }
+
+        public Dictionary<TeamLimit, int> Limits = new Dictionary<TeamLimit, int>();
+    }
+
+    public enum TeamLimit
+    {
+        Size=1,
+        ActiveBookings=2
+    }
+
+    public class IntegerBookingLimit
+    {
+        public TeamLimit Type { get; set; }
+        public int Value { get; set; }
     }
 }
