@@ -1,7 +1,6 @@
 ﻿@page "/teamsessions/{Date:datetime}"
 @inject BookingService BookingService
 @inject TeamService TeamService
-@inject NavigationManager NavigationManager
 @attribute [Authorize]
 @implements IDisposable
 @using System.Globalization
@@ -150,10 +149,7 @@ else
             Date = DateTime.Today;
 
         var nextTeamSessions = await GetNextDailyTeamSessions(Date);
-        var dateOfNextTeamSessions = RoundToDays(nextTeamSessions.First().session.StartTime);
-        if(dateOfNextTeamSessions!=inputDate)
-            NavigationManager.NavigateTo($"/teamsessions/{dateOfNextTeamSessions.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}", false);
-        
+        Date = RoundToDays(nextTeamSessions.First().session.StartTime);
         nextDayUrl = $"/teamsessions/{(await GetNextTeamSessionDateAfter(Date)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
         previousDayUrl = null;
         if (Date > DateTime.Today)

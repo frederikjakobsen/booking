@@ -1,6 +1,5 @@
 ﻿@page "/opensessions/{Date:datetime}"
 @inject BookingService BookingService
-@inject NavigationManager NavigationManager
 @attribute [Authorize]
 @implements IDisposable
 @using System.Globalization
@@ -99,7 +98,7 @@ else
     {
         Date = RoundToDays(Date);
         if (Date < DateTime.Today)
-            NavigationManager.NavigateTo($"/opensessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}", false);
+            Date=DateTime.Today;
 
         nextDayUrl = $"/opensessions/{(Date + TimeSpan.FromDays(1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
         if (Date > DateTime.Today)
