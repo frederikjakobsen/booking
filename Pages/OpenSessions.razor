@@ -109,7 +109,7 @@ else
         reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
         var openSlots = await BookingService.GetOpenSessions(Date, TimeSpan.FromDays(1));
 
-        sessions = openSlots.Where(e => e.StartTime >= DateTime.Now).Select(e =>
+        sessions = openSlots.Where(e => e.StartTime+e.Duration >= DateTime.Now).Select(e =>
         {
             var sessionReservations = GetReservations(e);
             var isBooked = ownReservations.Contains(e.StartTime);

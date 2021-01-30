@@ -59,11 +59,14 @@ else
 
     protected async override Task OnInitializedAsync()
     {
-        var userReservations = (await BookingService.GetLoggedOnUserReservations()).OrderBy(e => e.StartTime).ToList();
+        var userReservations = (await BookingService.GetLoggedOnUserReservations()).OrderBy(e => e.StartTime);
         foreach (var userres in userReservations)
         {
+            var team = await GetTeamForReservation(userres);
+            if (userres.StartTime + team.Duration < DateTime.Now)
+                continue;
+
             var userPosition = await BookingService.GetLoggedOnUserPositionForReservedSession(userres);
-            var team = await GetSessionSize(userres);
             var details = new OwnReservationUi();
             details.Generator = userres;
             details.QueueText = "";
@@ -80,13 +83,11 @@ else
         }
     }
 
-
-
-    private async Task<Team> GetSessionSize(UserReservation userReservation)
+    private async Task<Team> GetTeamForReservation(UserReservation userReservation)
     {
         if (userReservation.TeamId == "open")
         {
-            return new Team { Size = await BookingService.GetOpenSessionSize(userReservation.StartTime), Name = "open" };
+            return new Team { Size = await BookingService.GetOpenSessionSize(userReservation.StartTime), Duration=TimeSpan.FromHours(1), Name = "open" };
         }
 
         return TeamService.GetTeam(userReservation.TeamId);

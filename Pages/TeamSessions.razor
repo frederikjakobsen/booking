@@ -96,17 +96,26 @@ else
         return new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, date.Kind);
     }
 
-    private async Task<IEnumerable<TeamSession>> GetNextDailyTeamSessions(DateTime from)
+    class ResolvedTeamSession
+    {
+    public TeamSession session { get; set; }
+    public Team team { get; set; }
+    }
+
+    private async Task<IEnumerable<ResolvedTeamSession>> GetNextDailyTeamSessions(DateTime from)
     {
         var teamsessiondate = from;
-        var res = await BookingService.GetTeamSessions(from, TimeSpan.FromDays(1));
+        var sessions = await BookingService.GetTeamSessions(from, TimeSpan.FromDays(1));
 
-        while(!res.Any())
+        while(!sessions.Any())
         {
             teamsessiondate += TimeSpan.FromDays(1);
-            res = await BookingService.GetTeamSessions(teamsessiondate, TimeSpan.FromDays(1));
+            sessions = await BookingService.GetTeamSessions(teamsessiondate, TimeSpan.FromDays(1));
         }
-        return res;
+        return sessions.OrderBy(e=>e.StartTime).Select(e => new ResolvedTeamSession {
+            team = TeamService.GetTeam(e.TeamId),
+            session =e
+    });
     }
 
     private async Task<DateTime> GetPreviousTeamSessionDateBefore(DateTime date)
@@ -141,7 +150,7 @@ else
             Date = DateTime.Today;
 
         var nextTeamSessions = await GetNextDailyTeamSessions(Date);
-        var dateOfNextTeamSessions = RoundToDays(nextTeamSessions.First().StartTime);
+        var dateOfNextTeamSessions = RoundToDays(nextTeamSessions.First().session.StartTime);
         if(dateOfNextTeamSessions!=inputDate)
             NavigationManager.NavigateTo($"/teamsessions/{dateOfNextTeamSessions.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}", false);
         
@@ -156,30 +165,29 @@ else
 
         reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
 
-        sessions = nextTeamSessions.Where(e => e.StartTime >= DateTime.Now).Select(e =>
+        sessions = nextTeamSessions.Where(e => e.session.StartTime +e.team.Duration >= DateTime.Now).Select(e =>
         {
-            var team = TeamService.GetTeam(e.TeamId);
-            var reservations = GetReservations(e);
-            var isBooked = ownReservations.ContainsKey(e.StartTime);
+            var reservations = GetReservations(e.session);
+            var isBooked = ownReservations.ContainsKey(e.session.StartTime);
             
-            BookingStateToggler toggleState = async () => await Book(e);
+            BookingStateToggler toggleState = async () => await Book(e.session);
             if (isBooked)
-                toggleState = async () => await CancelBooking(e);
+                toggleState = async () => await CancelBooking(e.session);
             var res = new SessionUiItem
             {
-                Available = team.Size - reservations.Count(),
-                StartTime = e.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture),
+                Available = e.team.Size - reservations.Count(),
+                StartTime = e.session.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture),
                 BookingStateToggleText = isBooked ? SessionUiItem.BookingStateOnText : SessionUiItem.BookingStateOffText,
                 ToggleBookingState = toggleState,
                 Reservations = reservations,
-                Size = team.Size,
-                Generator = e,
-                TeamName = team.Name
+                Size = e.team.Size,
+                Generator = e.session,
+                TeamName = e.team.Name
             };
             int maxBookings = 0;
-            if (!isBooked && team.Limits.TryGetValue(TeamLimit.ActiveBookings, out maxBookings))
+            if (!isBooked && e.team.Limits.TryGetValue(TeamLimit.ActiveBookings, out maxBookings))
             {
-                res.Disabled = ownReservations.Count(kv => kv.Key > DateTime.Now && kv.Value == team.Id) >= maxBookings;
+                res.Disabled = ownReservations.Count(kv => kv.Key > DateTime.Now && kv.Value == e.team.Id) >= maxBookings;
             }
             
             return res;

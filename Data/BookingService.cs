@@ -106,6 +106,8 @@ namespace BookingApp.Data
     {
         public DateTime StartTime { get; set; }
         public int Size { get; set; }
+
+        public TimeSpan Duration { get; set; }
     }
 
 
@@ -126,7 +128,7 @@ namespace BookingApp.Data
             {
                 if (currentTime.TimeOfDay >= FirstSessionOfDay && currentTime.TimeOfDay + TimeSpan.FromHours(1) <= LastSessionOfDayEnd)
                 {
-                    res.Add(new OpenSession { Size = OpenSessionSize, StartTime = currentTime });
+                    res.Add(new OpenSession { Size = OpenSessionSize, StartTime = currentTime, Duration=TimeSpan.FromHours(1) });
                 }
                 currentTime = currentTime.AddHours(1);
             }
@@ -408,6 +410,7 @@ namespace BookingApp.Data
                 new WeeklyScheduledTeam { Day = DayOfWeek.Monday, TimeOfDay = TimeSpan.FromHours(16) + TimeSpan.FromMinutes(30), TeamId = "1"},
                 new WeeklyScheduledTeam { Day = DayOfWeek.Monday, TimeOfDay = TimeSpan.FromHours(18), TeamId = "2"},
                 new WeeklyScheduledTeam { Day = DayOfWeek.Saturday, TimeOfDay = TimeSpan.FromHours(18), TeamId = "3"},
+                new WeeklyScheduledTeam { Day = DayOfWeek.Saturday, TimeOfDay = TimeSpan.FromHours(17), TeamId = "1"},
             }
         };
 
