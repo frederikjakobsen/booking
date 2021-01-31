@@ -1,4 +1,5 @@
-﻿<div class="top-row pl-4 navbar navbar-dark">
+﻿@using System.Globalization
+<div class="top-row pl-4 navbar navbar-dark">
     <a class="navbar-brand" href="">BookingApp</a>
     <button class="navbar-toggler" @onclick="ToggleNavMenu">
         <span class="navbar-toggler-icon"></span>
@@ -13,12 +14,18 @@
             </NavLink>
         </li>
         <li class="nav-item px-3">
-            <NavLink class="nav-link" href="booking">
-                <span class="oi oi-plus" aria-hidden="true"></span> Booking
+            <NavLink class="nav-link" href="@openSessionLink">
+                <span class="oi oi-plus" aria-hidden="true"></span> Open
+            </NavLink>
+        </li>
+
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="@teamSessionLink">
+                <span class="oi oi-plus" aria-hidden="true"></span> Team
             </NavLink>
         </li>
         
-        <AuthorizeView>
+        <AuthorizeView Roles="approved">
             <Authorized>
             <li class="nav-item px-3">
                 <NavLink class="nav-link" href="usermanager">
@@ -39,4 +46,7 @@
     {
         collapseNavMenu = !collapseNavMenu;
     }
+
+    private readonly string openSessionLink = $"/opensessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+    private readonly string teamSessionLink = $"/teamsessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
 }
