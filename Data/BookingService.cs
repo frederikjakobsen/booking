@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -153,10 +154,17 @@ namespace BookingApp.Data
     }
 
 
-    public class UserReservation
+    public class UserReservation: IEquatable<UserReservation>
     {
         public DateTime StartTime { get; set; }
         public string TeamId { get; set; }
+
+        public bool Equals([AllowNull] UserReservation other)
+        {
+            if (other == null)
+                return false;
+            return other.StartTime == StartTime && other.TeamId == TeamId;
+        }
     }
 
     public class TimeSlotReservations
@@ -174,7 +182,7 @@ namespace BookingApp.Data
 
     public class BookingStorage
     {
-        private readonly ConcurrentDictionary<string, Dictionary<DateTime, UserReservation>> userReservations = new ConcurrentDictionary<string, Dictionary<DateTime, UserReservation>>();
+        private readonly ConcurrentDictionary<string, List<UserReservation>> userReservations = new ConcurrentDictionary<string, List<UserReservation>>();
 
         private readonly ConcurrentDictionary<DateTime, TimeSlotReservations> bookingsWithReservations = new ConcurrentDictionary<DateTime, TimeSlotReservations>();
 
@@ -182,7 +190,7 @@ namespace BookingApp.Data
 
         public IEnumerable<UserReservation> GetReservationsFor(string userId)
         {
-            return userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>()).Values;
+            return userReservations.GetValueOrDefault(userId, new List<UserReservation>());
         }
 
         public async Task<List<string>> GetReservationsForSession(string teamId, DateTime startTime)
@@ -230,8 +238,9 @@ namespace BookingApp.Data
             await reservationLock.WaitAsync();
             try
             {
-                var reservationsForUser = userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>());
-                if (reservationsForUser.Remove(reservation.StartTime))
+                var reservationsForUser = userReservations.GetValueOrDefault(userId, new List<UserReservation>());
+                
+                if (reservationsForUser.Remove(reservation))
                 {
                     var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime,
                             new TimeSlotReservations { OpenReservations = new List<string>(), TeamReservations = new Dictionary<string, List<string>>() }
@@ -253,9 +262,8 @@ namespace BookingApp.Data
             await reservationLock.WaitAsync();
             try
             {
-                var reservationsForUser = userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>());
-                if (!reservationsForUser.TryAdd(reservation.StartTime, reservation))
-                    return;
+                var reservationsForUser = userReservations.GetValueOrDefault(userId, new List<UserReservation>());
+                reservationsForUser.Add(reservation);
                 userReservations[userId] = reservationsForUser;
 
                 var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime,
@@ -277,9 +285,8 @@ namespace BookingApp.Data
             await reservationLock.WaitAsync();
             try
             {
-                var reservationsForUser = userReservations.GetValueOrDefault(userId, new Dictionary<DateTime, UserReservation>());
-                if (!reservationsForUser.TryAdd(reservation.StartTime, reservation))
-                    return;
+                var reservationsForUser = userReservations.GetValueOrDefault(userId, new List<UserReservation>());
+                reservationsForUser.Add(reservation);
                 userReservations[userId] = reservationsForUser;
 
                 var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime,
