@@ -103,44 +103,35 @@ namespace BookingApp.Data
         }
     }
 
-    public class OpenSession
-    {
-        public DateTime StartTime { get; set; }
-        public int Size { get; set; }
-
-        public TimeSpan Duration { get; set; }
-    }
-
-
 
     public class OpenSessionGenerator
     {
+        private readonly Team openTeam;
+
         private TimeSpan FirstSessionOfDay = TimeSpan.FromHours(6);
         private TimeSpan LastSessionOfDayEnd = TimeSpan.FromHours(23);
-        private int OpenSessionSize = 24;
 
-
-        public IEnumerable<OpenSession> GetHourlyOpenSessions(DateTime from, TimeSpan duration)
+        public OpenSessionGenerator(Team openTeam)
         {
-            var res = new List<OpenSession>();
+            this.openTeam = openTeam;
+        }
+
+
+        public IEnumerable<TeamSession> GetHourlyOpenSessions(DateTime from, TimeSpan duration)
+        {
+            var res = new List<TeamSession>();
             var currentTime = new DateTime(from.Year, from.Month, from.Day, from.Hour, 0, 0, from.Kind); // hourly rounded time
-            var latestPossibleStart = from + duration - TimeSpan.FromHours(1);
+            var latestPossibleStart = from + duration - openTeam.Duration;
             while (currentTime <= latestPossibleStart)
             {
-                if (currentTime.TimeOfDay >= FirstSessionOfDay && currentTime.TimeOfDay + TimeSpan.FromHours(1) <= LastSessionOfDayEnd)
+                if (currentTime.TimeOfDay >= FirstSessionOfDay && currentTime.TimeOfDay + openTeam.Duration <= LastSessionOfDayEnd)
                 {
-                    res.Add(new OpenSession { Size = OpenSessionSize, StartTime = currentTime, Duration=TimeSpan.FromHours(1) });
+                    res.Add(new TeamSession { StartTime = currentTime, TeamId=openTeam.Id });
                 }
-                currentTime = currentTime.AddHours(1);
+                currentTime = currentTime + openTeam.Duration;
             }
             return res;
         }
-    }
-
-    public class OccupiedTimeSlot
-    {
-        public TimeSlot TimeSlot { get; set; }
-        public int Occupants { get; set; }
     }
 
     public class TimeSlot
@@ -167,16 +158,10 @@ namespace BookingApp.Data
         }
     }
 
-    public class TimeSlotReservations
-    {
-        public List<string> OpenReservations { get; set; }
-        public Dictionary<string, List<string>> TeamReservations { get; set; }
-    }
-
     public class BookedTimeSlot
     {
         public DateTime StartTime { get; set; }
-        public TimeSlotReservations Reservations { get; set; }
+        public Dictionary<string, List<string>> TeamReservations { get; set; }
     }
 
 
@@ -184,7 +169,7 @@ namespace BookingApp.Data
     {
         private readonly ConcurrentDictionary<string, List<UserReservation>> userReservations = new ConcurrentDictionary<string, List<UserReservation>>();
 
-        private readonly ConcurrentDictionary<DateTime, TimeSlotReservations> bookingsWithReservations = new ConcurrentDictionary<DateTime, TimeSlotReservations>();
+        private readonly ConcurrentDictionary<DateTime, Dictionary<string, List<string>>> bookingsWithReservations = new ConcurrentDictionary<DateTime, Dictionary<string, List<string>>>();
 
         private readonly SemaphoreSlim reservationLock = new SemaphoreSlim(1);
 
@@ -198,14 +183,10 @@ namespace BookingApp.Data
             await reservationLock.WaitAsync();
             try
             {
-                TimeSlotReservations reservations;
+                Dictionary<string, List<string>> reservations;
                 if (!bookingsWithReservations.TryGetValue(startTime, out reservations))
                     return new List<string>();
-                if (teamId == "open")
-                {
-                    return reservations.OpenReservations;
-                }
-                return reservations.TeamReservations.GetValueOrDefault(teamId, new List<string>());
+                return reservations.GetValueOrDefault(teamId, new List<string>());
             }
             finally
             {
@@ -224,7 +205,7 @@ namespace BookingApp.Data
             try
             {
                 return bookingsWithReservations.Where(bookedTimeSlot => IsTimeWithin(bookedTimeSlot.Key, from, duration))
-                    .Select(bookedTimeSlot => new BookedTimeSlot { Reservations = bookedTimeSlot.Value, StartTime = bookedTimeSlot.Key })
+                    .Select(bookedTimeSlot => new BookedTimeSlot { TeamReservations = bookedTimeSlot.Value, StartTime = bookedTimeSlot.Key })
                     .ToList();
             }
             finally
@@ -239,16 +220,13 @@ namespace BookingApp.Data
             try
             {
                 var reservationsForUser = userReservations.GetValueOrDefault(userId, new List<UserReservation>());
-                
                 if (reservationsForUser.Remove(reservation))
                 {
                     var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime,
-                            new TimeSlotReservations { OpenReservations = new List<string>(), TeamReservations = new Dictionary<string, List<string>>() }
+                            new Dictionary<string, List<string>>()
                         );
-                    var reservationsForTeam = currentBookingsAtSameTime.TeamReservations.GetValueOrDefault(reservation.TeamId, new List<string>());
-                    if (reservationsForTeam.Remove(userId))
-                        return;
-                    currentBookingsAtSameTime.OpenReservations.Remove(userId);
+                    var reservationsForTeam = currentBookingsAtSameTime.GetValueOrDefault(reservation.TeamId, new List<string>());
+                    reservationsForTeam.Remove(userId);
                 }
             }
             finally
@@ -267,32 +245,11 @@ namespace BookingApp.Data
                 userReservations[userId] = reservationsForUser;
 
                 var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime,
-                    new TimeSlotReservations { OpenReservations = new List<string>(), TeamReservations = new Dictionary<string, List<string>>() }
+                    new Dictionary<string, List<string>>()
                     );
-                var teamReservations = currentBookingsAtSameTime.TeamReservations.GetValueOrDefault(reservation.TeamId, new List<string>());
+                var teamReservations = currentBookingsAtSameTime.GetValueOrDefault(reservation.TeamId, new List<string>());
                 teamReservations.Add(userId);
-                currentBookingsAtSameTime.TeamReservations[reservation.TeamId] = teamReservations;
-                bookingsWithReservations[reservation.StartTime] = currentBookingsAtSameTime;
-            }
-            finally
-            {
-                reservationLock.Release();
-            }
-        }
-
-        public async Task AddOpenReservation(string userId, UserReservation reservation)
-        {
-            await reservationLock.WaitAsync();
-            try
-            {
-                var reservationsForUser = userReservations.GetValueOrDefault(userId, new List<UserReservation>());
-                reservationsForUser.Add(reservation);
-                userReservations[userId] = reservationsForUser;
-
-                var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime,
-                        new TimeSlotReservations { OpenReservations = new List<string>(), TeamReservations = new Dictionary<string, List<string>>() }
-                    );
-                currentBookingsAtSameTime.OpenReservations.Add(userId);
+                currentBookingsAtSameTime[reservation.TeamId] = teamReservations;
                 bookingsWithReservations[reservation.StartTime] = currentBookingsAtSameTime;
             }
             finally
@@ -310,6 +267,7 @@ namespace BookingApp.Data
         private readonly SpaceSchedule spaceSchedule;
         private readonly AuthenticationStateProvider authenticationStateProvider;
         private readonly UserManager<ApplicationUser> userManager;
+        private readonly OpenSessionGenerator openSessionGenerator;
 
         private readonly SemaphoreSlim reservationLock = new SemaphoreSlim(1);
 
@@ -320,27 +278,7 @@ namespace BookingApp.Data
             this.bookingStorage = bookingStorage;
             this.teamService = teamService;
             this.spaceSchedule = new SpaceSchedule(teamSessionGenerator, teamService);
-        }
-
-        public async Task MakeOpenReservation(OpenSession session)
-        {
-            var state = await authenticationStateProvider.GetAuthenticationStateAsync();
-            var userId = (await userManager.GetUserAsync(state.User)).Id;
-            await bookingStorage.AddOpenReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = "open" });
-            OnBookingsChanged();
-        }
-
-        public async Task CancelOpenReservationAt(DateTime starttime)
-        {
-            var state = await authenticationStateProvider.GetAuthenticationStateAsync();
-            var userId = (await userManager.GetUserAsync(state.User)).Id;
-            await bookingStorage.RemoveReservation(userId, new UserReservation { StartTime = starttime, TeamId = "open" });
-            OnBookingsChanged();
-        }
-
-        public async Task CancelOpenReservation(OpenSession session)
-        {
-            await CancelOpenReservationAt(session.StartTime);
+            this.openSessionGenerator = new OpenSessionGenerator(teamService.GetTeam("open"));
         }
 
         public async Task MakeTeamReservation(TeamSession session)
@@ -390,6 +328,8 @@ namespace BookingApp.Data
         public Task<int> GetOpenSessionSize(DateTime startTime)
         {
             // todo move into space schedule and set space size in there
+            // todo use limit here instead - this means we can only have one session without limits, otherwise the ones without limit takes spots from each other, which might be OK
+            // initially it would be ok to just make sure a schedule must only contain one session without limits at any given time, otherwise it is an invalid schedule...
             var sessions = spaceSchedule.GetTeamSessionsActiveDuring(new TimeSlot { Duration = TimeSpan.FromHours(1), StartTime = startTime});
             return Task.FromResult(24 - sessions.Sum(e => teamService.GetTeam(e.TeamId).Size));
         }
@@ -421,36 +361,16 @@ namespace BookingApp.Data
             }
         };
 
-        private readonly OpenSessionGenerator openSessionGenerator = new OpenSessionGenerator();
-
-        private IEnumerable<OccupiedTimeSlot> GetOccupiedSlots(DateTime from, TimeSpan duration)
-        {
-            var teamslots =teamSessionGenerator.GetTeamSlots(from, duration);
-            return teamslots.Select(e => {
-                var team = teamService.GetTeam(e.TeamId);
-                return new OccupiedTimeSlot { Occupants = team.Size, TimeSlot = new TimeSlot { StartTime=e.StartTime,Duration=team.Duration } };
-                });
-        }
-
         // this assumes that from is the start of the day and that teams do not span across days
-        public Task<IEnumerable<OpenSession>> GetOpenSessions(DateTime from, TimeSpan duration)
+        public Task<IEnumerable<TeamSession>> GetOpenSessions(DateTime from, TimeSpan duration)
         {
-            // todo: what if from was just after a team had started?
-            var occupiedSlots = GetOccupiedSlots(from, duration);
-            var res = openSessionGenerator.GetHourlyOpenSessions(from, duration);
-            foreach (var occupiedSlot in occupiedSlots)
-            {
-                foreach (var session in res.Where(e => ConvertToTimeSlot(e).Overlaps(occupiedSlot.TimeSlot)))
-                {
-                    session.Size -= occupiedSlot.Occupants;
-                }
-            }
-            return Task.FromResult(res);
+            return Task.FromResult(openSessionGenerator.GetHourlyOpenSessions(from, duration));
         }
 
-        private TimeSlot ConvertToTimeSlot(OpenSession session)
+        public int GetFreeSpace(TimeSlot timeSlot)
         {
-            return new TimeSlot { StartTime = session.StartTime, Duration = TimeSpan.FromHours(1) };
+            var teamSessionsDuringTimeSlot = spaceSchedule.GetTeamSessionsActiveDuring(timeSlot);
+            return 24 - teamSessionsDuringTimeSlot.Sum(e => teamService.GetTeam(e.TeamId).Size);
         }
 
         private readonly TeamSessionGenerator teamSessionGenerator = new TeamSessionGenerator(ActiveSchedule.ScheduledTeams);
@@ -474,8 +394,18 @@ namespace BookingApp.Data
     {
         private readonly Dictionary<string, Team> teams = new Dictionary<string, Team>();
 
+        public static readonly Team Open = new Team
+        {
+            Duration = TimeSpan.FromHours(1),
+            Id = "open",
+            Name = "Open",
+            Size = 0,//todo remove size and use limit instead
+            Limits = new Dictionary<TeamLimit, int>()
+        };
+
         public TeamService()
         {
+            teams.Add("open", Open);
             teams.Add("1", new Team
             {
                 Duration = TimeSpan.FromMinutes(90),

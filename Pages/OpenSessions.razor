@@ -1,10 +1,12 @@
 ﻿@page "/opensessions/{Date:datetime}"
 @inject BookingService BookingService
+@inject TeamService TeamService
 @attribute [Authorize]
 @implements IDisposable
 @using System.Globalization
 
 <h2>Open session booking</h2>
+
 
 @if (sessions == null)
 {
@@ -12,56 +14,54 @@
 }
 else
 {
-<table style="min-width:300px;">
+<table style="min-width:400px;">
     <tr>
-        <th colspan="3" class="text-center">@Date.ToString("MMMM", CultureInfo.InvariantCulture)</th>
+        <th colspan="4" class="text-center">@Date.ToString("MMMM", CultureInfo.InvariantCulture)</th>
     </tr>
     <tr>
-        <th>
-            @if (previousDayUrl != null)
+        <th>@if (previousDayUrl != null)
                 {<a href="@previousDayUrl">earlier</a>}
                 else
-                {<span class="text-muted">earlier</span>}
-        </th>
-        <th class="text-center">@Date.Day</th>
+                {<span class="text-muted">earlier</span>}</th>
+        <th colspan="2" class="text-center">@Date.Day</th>
         <th class="text-right"><a href="@nextDayUrl">later</a></th>
     </tr>
     <tr>
-        <th colspan="3" class="text-center">@Date.DayOfWeek</th>
+        <th colspan="4" class="text-center">@Date.DayOfWeek</th>
     </tr>
 
-    @foreach (var open in sessions)
+    @foreach (var session in sessions)
         {
     <tr>
-        <td class="text-center"><button @onclick="()=>ToggleReservationsViewFor(open)">@open.Available/@open.Size</button></td>
-        <td class="text-center">@open.StartTime</td>
-        <td>
-            <button @onclick="()=>open.ToggleBookingState()">@open.BookingStateToggleText</button>
-        </td>
+        <td>@session.StartTime</td>
+        <td>@session.TeamName</td>
+        <td class="text-center"><button @onclick="()=>ToggleReservationsViewFor(session)">@session.Available/@session.Size</button></td>
+        <td><button disabled=@session.Disabled @onclick="()=>session.ToggleBookingState()">@session.BookingStateToggleText</button></td>
     </tr>
-    @if (selectedSession == open.Generator)
+    @if (selectedSession == session.Generator)
             {
     <tr>
-        <td colspan="4"><SessionInfo userIds=open.Reservations Size=open.Size /></td>
+        <td colspan="4"><SessionInfo userIds=session.Reservations Size=session.Size /></td>
     </tr>
     }
     }
 </table>
 }
 
+
 @code {
     private string nextDayUrl = null;
     private string previousDayUrl = null;
-    private HashSet<DateTime> ownReservations = new HashSet<DateTime>();
-
+    private Dictionary<DateTime, string> ownReservations = new Dictionary<DateTime, string>();
     private IEnumerable<BookedTimeSlot> reservations = null;
 
     [Parameter]
     public DateTime Date { get; set; }
 
+
     private IEnumerable<SessionUiItem> sessions = null;
 
-    private OpenSession selectedSession = null;
+    private Object selectedSession = null;
 
     private void ToggleReservationsViewFor(SessionUiItem item)
     {
@@ -78,84 +78,162 @@ else
     {
         public int Available { get; set; }
         public int Size { get; set; }
-        public bool ShowReservations { get; set; } = false;
+        public bool Disabled {get;set;} = false;
         public IEnumerable<string> Reservations;
         public string StartTime { get; set; }
+        public string TeamName;
         public BookingStateToggler ToggleBookingState;
-    public string BookingStateToggleText { get; set; }
+        public string BookingStateToggleText { get; set; }
         public const string BookingStateOnText = "Cancel booking";
         public const string BookingStateOffText = "Book";
-        public OpenSession Generator;
+        public Object Generator;
     }
 
-    private DateTime RoundToDays(DateTime date)
+
+    private static DateTime RoundToDays(DateTime date)
     {
         return new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, date.Kind);
     }
 
+    class ResolvedTeamSession
+    {
+        public TeamSession session { get; set; }
+        public Team team { get; set; }
+        public int FreeSpace { get; set; }
+    }
+
+    private async Task<IEnumerable<ResolvedTeamSession>> GetNextDailyTeamSessions(DateTime from)
+    {
+        var teamsessiondate = from;
+        var sessions = await BookingService.GetOpenSessions(from, TimeSpan.FromDays(1));
+
+        while(!sessions.Any())
+        {
+            teamsessiondate += TimeSpan.FromDays(1);
+            sessions = await BookingService.GetOpenSessions(teamsessiondate, TimeSpan.FromDays(1));
+        }
+        return sessions.OrderBy(e=>e.StartTime).Select(e => 
+        {
+            var team = TeamService.GetTeam(e.TeamId);
+            return new ResolvedTeamSession
+            {
+                team = team,
+                session = e,
+                FreeSpace = BookingService.GetFreeSpace(new TimeSlot { StartTime = e.StartTime, Duration = team.Duration })
+            };
+        });
+    }
+
+    private async Task<DateTime> GetPreviousTeamSessionDateBefore(DateTime date)
+    {
+        var teamsessiondate = date;
+
+        while (true)
+        {
+            teamsessiondate -= TimeSpan.FromDays(1);
+            if ((await BookingService.GetOpenSessions(teamsessiondate, TimeSpan.FromDays(1))).Any())
+                return teamsessiondate;
+        }
+    }
+
+    private async Task<DateTime> GetNextTeamSessionDateAfter(DateTime date)
+    {
+        var teamsessiondate = date;
+
+        while (true)
+        {
+            teamsessiondate += TimeSpan.FromDays(1);
+            if ((await BookingService.GetOpenSessions(teamsessiondate, TimeSpan.FromDays(1))).Any())
+                return teamsessiondate;
+        }
+    }
 
     protected async override Task OnParametersSetAsync()
     {
         Date = RoundToDays(Date);
+        var inputDate = Date;
         if (Date < DateTime.Today)
-            Date=DateTime.Today;
+            Date = DateTime.Today;
 
-        nextDayUrl = $"/opensessions/{(Date + TimeSpan.FromDays(1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+        var nextTeamSessions = await GetNextDailyTeamSessions(Date);
+        Date = RoundToDays(nextTeamSessions.First().session.StartTime);
+        nextDayUrl = $"/opensessions/{(await GetNextTeamSessionDateAfter(Date)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+        previousDayUrl = null;
         if (Date > DateTime.Today)
-            previousDayUrl = $"/opensessions/{(Date - TimeSpan.FromDays(1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
-        else
-            previousDayUrl = null;
-        reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
-        var openSlots = await BookingService.GetOpenSessions(Date, TimeSpan.FromDays(1));
-
-        sessions = openSlots.Where(e => e.StartTime+e.Duration >= DateTime.Now).Select(e =>
         {
-            var sessionReservations = GetReservations(e);
-            var isBooked = ownReservations.Contains(e.StartTime);
-            BookingStateToggler toggleState = async () => await BookOpen(e);
+            var previousSessionDate = await GetPreviousTeamSessionDateBefore(inputDate);
+            if (previousSessionDate >= DateTime.Today)
+                previousDayUrl = $"/opensessions/{previousSessionDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+        }
+
+        reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
+
+        sessions = nextTeamSessions.Where(e => e.session.StartTime +e.team.Duration >= DateTime.Now).Select(e =>
+        {
+            var reservations = GetReservations(e.session);
+            var isBooked = ownReservations.ContainsKey(e.session.StartTime);
+            
+            BookingStateToggler toggleState = async () => await Book(e.session);
             if (isBooked)
-                toggleState = async () => await CancelOpenBooking(e);
-            return new SessionUiItem
+                toggleState = async () => await CancelBooking(e.session);
+            var res = new SessionUiItem
             {
-                Available = e.Size - sessionReservations.Count(),
-                StartTime = e.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture),
+                Available = e.FreeSpace - reservations.Count(),
+                StartTime = e.session.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture),
                 BookingStateToggleText = isBooked ? SessionUiItem.BookingStateOnText : SessionUiItem.BookingStateOffText,
                 ToggleBookingState = toggleState,
-                Reservations = sessionReservations,
-                Size = e.Size,
-                Generator = e,
+                Reservations = reservations,
+                Size = e.FreeSpace,
+                Generator = e.session,
+                TeamName = e.team.Name
             };
+            int maxBookings = 0;
+            if (!isBooked && e.team.Limits.TryGetValue(TeamLimit.ActiveBookings, out maxBookings))
+            {
+                res.Disabled = ownReservations.Count(kv => kv.Key > DateTime.Now && kv.Value == e.team.Id) >= maxBookings;
+            }
+            
+            return res;
         });
     }
 
     protected async override Task OnInitializedAsync()
     {
-        var myBookings = await BookingService.GetLoggedOnUserReservations();
+        var ownBookings = await BookingService.GetLoggedOnUserReservations();
 
-        var openBookings = myBookings.Where(e => e.TeamId == "open");
-        foreach (var openBooking in openBookings)
+        var ownTeamBookings = ownBookings.Where(e => e.TeamId != "open");
+        foreach(var teamBooking in ownTeamBookings)
         {
-            ownReservations.Add(openBooking.StartTime);
+            ownReservations.Add(teamBooking.StartTime, teamBooking.TeamId);
         }
-
         BookingService.OnBookingsChanged += this.BookingsChanged;
     }
 
-    private IEnumerable<string> GetReservations(OpenSession session)
+    private IEnumerable<string> GetReservations(TeamSession session)
     {
         var res = reservations.Where(res => res.StartTime == session.StartTime);
-        return res.Select(e => e.Reservations.OpenReservations).DefaultIfEmpty(Enumerable.Empty<string>()).SingleOrDefault();
+        if (res.Any())
+        {
+            var teamReservations = res.Select(e => e.TeamReservations).Single();
+            List<string> reservationsForTeam = null;
+            if (teamReservations.TryGetValue(session.TeamId, out reservationsForTeam))
+            {
+                return reservationsForTeam;
+            }
+            return Enumerable.Empty<string>();
+        }
+        return Enumerable.Empty<string>();
     }
 
-    private async Task BookOpen(OpenSession sessionToBook)
+    private async Task Book(TeamSession sessionToBook)
     {
-        await BookingService.MakeOpenReservation(sessionToBook);
-        ownReservations.Add(sessionToBook.StartTime);
+        await BookingService.MakeTeamReservation(sessionToBook);
+        ownReservations[sessionToBook.StartTime] = sessionToBook.TeamId;
     }
 
-    private async Task CancelOpenBooking(OpenSession sessionToBook)
+    private async Task CancelBooking(TeamSession sessionToBook)
     {
-        await BookingService.CancelOpenReservation(sessionToBook);
+        await BookingService.CancelTeamReservation(sessionToBook);
         ownReservations.Remove(sessionToBook.StartTime);
     }
 
@@ -169,5 +247,5 @@ else
     {
         BookingService.OnBookingsChanged -= this.BookingsChanged;
     }
-
+    
 }

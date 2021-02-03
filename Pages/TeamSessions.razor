@@ -207,7 +207,7 @@ else
         var res = reservations.Where(res => res.StartTime == session.StartTime);
         if (res.Any())
         {
-            var teamReservations = res.Select(e => e.Reservations.TeamReservations).Single();
+            var teamReservations = res.Select(e => e.TeamReservations).Single();
             List<string> reservationsForTeam = null;
             if (teamReservations.TryGetValue(session.TeamId, out reservationsForTeam))
             {
