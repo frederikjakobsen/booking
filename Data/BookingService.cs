@@ -37,6 +37,7 @@ namespace BookingApp.Data
     {
         private readonly TeamSessionGenerator sessionGenerator;
         private readonly TeamService teamService;
+        private readonly int spaceSize = 24;
 
         public SpaceSchedule(TeamSessionGenerator sessionGenerator, TeamService teamService)
         {
@@ -50,6 +51,12 @@ namespace BookingApp.Data
             var maxTeamDuration = TimeSpan.FromDays(7);
             var possiblyOverlappingTeams = sessionGenerator.GetTeamSlots(timeSlot.StartTime - maxTeamDuration, maxTeamDuration + timeSlot.Duration);
             return possiblyOverlappingTeams.Where(e => ConvertToTimeSlot(e).Overlaps(timeSlot));
+        }
+
+        public int GetFreeSpace(TimeSlot timeSlot)
+        {
+            var sessions = GetTeamSessionsActiveDuring(timeSlot);
+            return spaceSize - sessions.Sum(e => teamService.GetTeam(e.TeamId).Limits.GetValueOrDefault(TeamLimit.Size));
         }
 
         private TimeSlot ConvertToTimeSlot(TeamSession session)
@@ -325,15 +332,6 @@ namespace BookingApp.Data
             OnBookingsChanged();
         }
 
-        public Task<int> GetOpenSessionSize(DateTime startTime)
-        {
-            // todo move into space schedule and set space size in there
-            // todo use limit here instead - this means we can only have one session without limits, otherwise the ones without limit takes spots from each other, which might be OK
-            // initially it would be ok to just make sure a schedule must only contain one session without limits at any given time, otherwise it is an invalid schedule...
-            var sessions = spaceSchedule.GetTeamSessionsActiveDuring(new TimeSlot { Duration = TimeSpan.FromHours(1), StartTime = startTime});
-            return Task.FromResult(24 - sessions.Sum(e => teamService.GetTeam(e.TeamId).Size));
-        }
-
         public async Task<int> GetLoggedOnUserPositionForReservedSession(UserReservation userReservation)
         {
             var allreservations= await bookingStorage.GetReservationsForSession(userReservation.TeamId, userReservation.StartTime);
@@ -369,8 +367,7 @@ namespace BookingApp.Data
 
         public int GetFreeSpace(TimeSlot timeSlot)
         {
-            var teamSessionsDuringTimeSlot = spaceSchedule.GetTeamSessionsActiveDuring(timeSlot);
-            return 24 - teamSessionsDuringTimeSlot.Sum(e => teamService.GetTeam(e.TeamId).Size);
+            return spaceSchedule.GetFreeSpace(timeSlot);
         }
 
         private readonly TeamSessionGenerator teamSessionGenerator = new TeamSessionGenerator(ActiveSchedule.ScheduledTeams);
@@ -399,7 +396,6 @@ namespace BookingApp.Data
             Duration = TimeSpan.FromHours(1),
             Id = "open",
             Name = "Open",
-            Size = 0,//todo remove size and use limit instead
             Limits = new Dictionary<TeamLimit, int>()
         };
 
@@ -411,7 +407,6 @@ namespace BookingApp.Data
                 Duration = TimeSpan.FromMinutes(90),
                 Id = "1",
                 Name = "Beginner",
-                Size = 1,
                 Limits =
                 new Dictionary<TeamLimit, int>
                 {
@@ -419,7 +414,7 @@ namespace BookingApp.Data
                     { TeamLimit.ActiveBookings, 2}
                 }
             });
-            teams.Add("2", new Team { Duration = TimeSpan.FromMinutes(90), Id = "2", Name = "Intermediate", Size = 2,
+            teams.Add("2", new Team { Duration = TimeSpan.FromMinutes(90), Id = "2", Name = "Intermediate",
                 Limits =
                 new Dictionary<TeamLimit, int>
                 {
@@ -427,7 +422,7 @@ namespace BookingApp.Data
                     { TeamLimit.ActiveBookings, 2}
                 }
             });
-            teams.Add("3", new Team { Duration = TimeSpan.FromMinutes(90), Id = "3", Name = "Elite", Size = 3,
+            teams.Add("3", new Team { Duration = TimeSpan.FromMinutes(90), Id = "3", Name = "Elite",
                 Limits =
                 new Dictionary<TeamLimit, int>
                 {
@@ -448,9 +443,6 @@ namespace BookingApp.Data
         public string Id { get; set; }
         public string Name { get; set; }
         public TimeSpan Duration { get; set; }
-
-        // this could be seen as a limit, maybe set a list of limits for each team? this way we could also fit the open teams in here which have a special size limit..
-        public int Size { get; set; }
 
         public Dictionary<TeamLimit, int> Limits = new Dictionary<TeamLimit, int>();
     }

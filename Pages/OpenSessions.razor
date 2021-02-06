@@ -201,7 +201,7 @@ else
     {
         var ownBookings = await BookingService.GetLoggedOnUserReservations();
 
-        var ownTeamBookings = ownBookings.Where(e => e.TeamId != "open");
+        var ownTeamBookings = ownBookings.Where(e => e.TeamId == "open");
         foreach(var teamBooking in ownTeamBookings)
         {
             ownReservations.Add(teamBooking.StartTime, teamBooking.TeamId);

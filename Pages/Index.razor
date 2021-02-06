@@ -57,12 +57,22 @@ else
 
     private List<OwnReservationUi> reservationDetails = new List<OwnReservationUi>();
 
+    private int GetTeamSize(Team team, DateTime startTime)
+    {
+        int sizeLimit = 0;
+        if (team.Limits.TryGetValue(TeamLimit.Size, out sizeLimit))
+        {
+            return sizeLimit;
+        }
+        return BookingService.GetFreeSpace(new TimeSlot { Duration = team.Duration, StartTime = startTime });
+    }
+
     protected async override Task OnInitializedAsync()
     {
         var userReservations = (await BookingService.GetLoggedOnUserReservations()).OrderBy(e => e.StartTime);
         foreach (var userres in userReservations)
         {
-            var team = await GetTeamForReservation(userres);
+            var team = GetTeamForReservation(userres);
             if (userres.StartTime + team.Duration < DateTime.Now)
                 continue;
 
@@ -73,23 +83,18 @@ else
             details.SessionBookingPageUrl = CreateSessionBookingPageUrl(userres);
             details.StartTime = userres.StartTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
             details.Team = team.Name;
-
-            if (userPosition >= team.Size)
+            var teamSize = GetTeamSize(team, userres.StartTime);
+            if (userPosition >= teamSize)
             {
-                var positionInQueue = userPosition - team.Size + 1;
+                var positionInQueue = userPosition - teamSize + 1;
                 details.QueueText = $"In queue ({positionInQueue})";
             }
             reservationDetails.Add(details);
         }
     }
 
-    private async Task<Team> GetTeamForReservation(UserReservation userReservation)
+    private Team GetTeamForReservation(UserReservation userReservation)
     {
-        if (userReservation.TeamId == "open")
-        {
-            return new Team { Size = await BookingService.GetOpenSessionSize(userReservation.StartTime), Duration=TimeSpan.FromHours(1), Name = "open" };
-        }
-
         return TeamService.GetTeam(userReservation.TeamId);
     }
 

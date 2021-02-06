@@ -141,6 +141,16 @@ else
         }
     }
 
+    private int GetTeamSize(Team team, DateTime startTime)
+    {
+      int sizeLimit = 0;
+      if(team.Limits.TryGetValue(TeamLimit.Size, out sizeLimit))
+      {
+            return sizeLimit;
+      }
+      return BookingService.GetFreeSpace(new TimeSlot { Duration = team.Duration, StartTime = startTime });
+    }
+
     protected async override Task OnParametersSetAsync()
     {
         Date = RoundToDays(Date);
@@ -169,14 +179,16 @@ else
             BookingStateToggler toggleState = async () => await Book(e.session);
             if (isBooked)
                 toggleState = async () => await CancelBooking(e.session);
+
+                var teamSize = GetTeamSize(e.team, e.session.StartTime);
             var res = new SessionUiItem
             {
-                Available = e.team.Size - reservations.Count(),
+                Available = teamSize - reservations.Count(),
                 StartTime = e.session.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture),
                 BookingStateToggleText = isBooked ? SessionUiItem.BookingStateOnText : SessionUiItem.BookingStateOffText,
                 ToggleBookingState = toggleState,
                 Reservations = reservations,
-                Size = e.team.Size,
+                Size = teamSize,
                 Generator = e.session,
                 TeamName = e.team.Name
             };
