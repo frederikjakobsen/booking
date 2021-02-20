@@ -372,9 +372,9 @@ namespace BookingApp.Data
 
         private readonly TeamSessionGenerator teamSessionGenerator = new TeamSessionGenerator(ActiveSchedule.ScheduledTeams);
 
-        public Task<IEnumerable<TeamSession>> GetTeamSessions(DateTime from, TimeSpan duration)
+        public IEnumerable<TeamSession> GetTeamSessions(DateTime from, TimeSpan duration)
         {
-            return Task.FromResult(teamSessionGenerator.GetTeamSlots(from, duration));
+            return teamSessionGenerator.GetTeamSlots(from, duration);
         }
 
         public Task<IEnumerable<BookedTimeSlot>> GetAllReservations(DateTime from, TimeSpan duration)

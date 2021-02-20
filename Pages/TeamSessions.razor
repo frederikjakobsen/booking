@@ -95,52 +95,6 @@ else
         return new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, date.Kind);
     }
 
-    class ResolvedTeamSession
-    {
-    public TeamSession session { get; set; }
-    public Team team { get; set; }
-    }
-
-    private async Task<IEnumerable<ResolvedTeamSession>> GetNextDailyTeamSessions(DateTime from)
-    {
-        var teamsessiondate = from;
-        var sessions = await BookingService.GetTeamSessions(from, TimeSpan.FromDays(1));
-
-        while(!sessions.Any())
-        {
-            teamsessiondate += TimeSpan.FromDays(1);
-            sessions = await BookingService.GetTeamSessions(teamsessiondate, TimeSpan.FromDays(1));
-        }
-        return sessions.OrderBy(e=>e.StartTime).Select(e => new ResolvedTeamSession {
-            team = TeamService.GetTeam(e.TeamId),
-            session =e
-    });
-    }
-
-    private async Task<DateTime> GetPreviousTeamSessionDateBefore(DateTime date)
-    {
-        var teamsessiondate = date;
-
-        while (true)
-        {
-            teamsessiondate -= TimeSpan.FromDays(1);
-            if ((await BookingService.GetTeamSessions(teamsessiondate, TimeSpan.FromDays(1))).Any())
-                return teamsessiondate;
-        }
-    }
-
-    private async Task<DateTime> GetNextTeamSessionDateAfter(DateTime date)
-    {
-        var teamsessiondate = date;
-
-        while (true)
-        {
-            teamsessiondate += TimeSpan.FromDays(1);
-            if ((await BookingService.GetTeamSessions(teamsessiondate, TimeSpan.FromDays(1))).Any())
-                return teamsessiondate;
-        }
-    }
-
     private int GetTeamSize(Team team, DateTime startTime)
     {
       int sizeLimit = 0;
@@ -151,27 +105,30 @@ else
       return BookingService.GetFreeSpace(new TimeSlot { Duration = team.Duration, StartTime = startTime });
     }
 
-    protected async override Task OnParametersSetAsync()
+    private DateTime SanitizeSessionDate(DateTime date)
     {
-        Date = RoundToDays(Date);
-        var inputDate = Date;
-        if (Date < DateTime.Today)
-            Date = DateTime.Today;
+        var res = RoundToDays(date);
+        if (res < DateTime.Today)
+            res = DateTime.Today;
+        return res;
+    }
 
-        var nextTeamSessions = await GetNextDailyTeamSessions(Date);
-        Date = RoundToDays(nextTeamSessions.First().session.StartTime);
-        nextDayUrl = $"/teamsessions/{(await GetNextTeamSessionDateAfter(Date)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
-        previousDayUrl = null;
-        if (Date > DateTime.Today)
-        {
-            var previousSessionDate = await GetPreviousTeamSessionDateBefore(inputDate);
-            if (previousSessionDate >= DateTime.Today)
-                previousDayUrl = $"/teamsessions/{previousSessionDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
-        }
+    protected override async Task OnParametersSetAsync()
+    {
+        var sessionCalendar =new TeamSessionCalendar(BookingService);
+        var sessionResolver = new SessionResolver(BookingService, TeamService);
+        var sessionNavigator = new SessionNavigator(sessionCalendar, "teamsessions");
+        
+        var sessionsForDate =  sessionCalendar.DailySessions(SanitizeSessionDate(Date)).ToList();
+        Date = SanitizeSessionDate(sessionsForDate.First().StartTime);
+        
+        nextDayUrl = sessionNavigator.GetNextSessionDayUrl(Date);
+        previousDayUrl = sessionNavigator.GetPreviousSessionDayUrl(Date);
 
         reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
+        var sessionData = sessionResolver.ResolveSessions(sessionsForDate);
 
-        sessions = nextTeamSessions.Where(e => e.session.StartTime +e.team.Duration >= DateTime.Now).Select(e =>
+        sessions = sessionData.Where(e => e.session.StartTime +e.team.Duration >= DateTime.Now).Select(e =>
         {
             var reservations = GetReservations(e.session);
             var isBooked = ownReservations.ContainsKey(e.session.StartTime);
@@ -192,8 +149,7 @@ else
                 Generator = e.session,
                 TeamName = e.team.Name
             };
-            int maxBookings = 0;
-            if (!isBooked && e.team.Limits.TryGetValue(TeamLimit.ActiveBookings, out maxBookings))
+            if (!isBooked && e.team.Limits.TryGetValue(TeamLimit.ActiveBookings, out var maxBookings))
             {
                 res.Disabled = ownReservations.Count(kv => kv.Key > DateTime.Now && kv.Value == e.team.Id) >= maxBookings;
             }
