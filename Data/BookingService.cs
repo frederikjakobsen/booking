@@ -24,122 +24,12 @@ namespace BookingApp.Data
         public string TeamId { get; set; }
         public DateTime StartTime { get; set; }
     }
-
-    //dto?
+    
     public class WeeklyTeamSchedule
     {
         public IEnumerable<WeeklyScheduledTeam> ScheduledTeams { get; set; }
-        public DateTime ValidityStart { get; set; }
-        public DateTime ValidityEnd { get; set; }
     }
 
-    public class SpaceSchedule
-    {
-        private readonly TeamSessionGenerator sessionGenerator;
-        private readonly TeamService teamService;
-        private readonly int spaceSize = 24;
-
-        public SpaceSchedule(TeamSessionGenerator sessionGenerator, TeamService teamService)
-        {
-            this.sessionGenerator = sessionGenerator;
-            this.teamService = teamService;
-        }
-
-        public IEnumerable<TeamSession> GetTeamSessionsActiveDuring(TimeSlot timeSlot)
-        {
-            // a team can at most last for one week, so we start by finding the teams starting at start time minus one week
-            var maxTeamDuration = TimeSpan.FromDays(7);
-            var possiblyOverlappingTeams = sessionGenerator.GetTeamSlots(timeSlot.StartTime - maxTeamDuration, maxTeamDuration + timeSlot.Duration);
-            return possiblyOverlappingTeams.Where(e => ConvertToTimeSlot(e).Overlaps(timeSlot));
-        }
-
-        public int GetFreeSpace(TimeSlot timeSlot)
-        {
-            var sessions = GetTeamSessionsActiveDuring(timeSlot);
-            return spaceSize - sessions.Sum(e => teamService.GetTeam(e.TeamId).Limits.GetValueOrDefault(TeamLimit.Size));
-        }
-
-        private TimeSlot ConvertToTimeSlot(TeamSession session)
-        {
-            return new TimeSlot { Duration = teamService.GetTeam(session.TeamId).Duration, StartTime = session.StartTime };
-        }
-    }
-
-
-    public class TeamSessionGenerator
-    {
-        private readonly IEnumerable<WeeklyScheduledTeam> scheduledTeams;
-
-        public TeamSessionGenerator(IEnumerable<WeeklyScheduledTeam> scheduledTeams)
-        {
-            this.scheduledTeams = scheduledTeams;
-        }
-
-        // get team sessions starting in the given interval
-        public IEnumerable<TeamSession> GetTeamSlots(DateTime from, TimeSpan duration)
-        {
-            var currentTime = from;
-            var endTime = from + duration;
-
-            var startDay = from.DayOfWeek;
-            var numberOfDays = (int)Math.Ceiling(1 + duration.TotalDays);
-
-            var res = new List<TeamSession>();
-            var currentDay = startDay;
-            for (var day = 0; day < numberOfDays; day++)
-            {
-                foreach (var scheduledTeam in scheduledTeams)
-                {
-                    if (scheduledTeam.Day == currentDay)
-                    {
-                        var startTime = currentTime - currentTime.TimeOfDay + scheduledTeam.TimeOfDay;
-                        if (startTime >= from && startTime <= endTime)
-                        {
-                            res.Add(new TeamSession
-                            {
-                                TeamId = scheduledTeam.TeamId,
-                                StartTime = startTime
-                            });
-                        }
-                    }
-                }
-                currentDay = (DayOfWeek)(((int)currentDay + 1) % 7);
-                currentTime += TimeSpan.FromDays(1);
-            }
-            return res;
-        }
-    }
-
-
-    public class OpenSessionGenerator
-    {
-        private readonly Team openTeam;
-
-        private TimeSpan FirstSessionOfDay = TimeSpan.FromHours(6);
-        private TimeSpan LastSessionOfDayEnd = TimeSpan.FromHours(23);
-
-        public OpenSessionGenerator(Team openTeam)
-        {
-            this.openTeam = openTeam;
-        }
-
-
-        public IEnumerable<TeamSession> GetHourlyOpenSessions(DateTime from, TimeSpan duration)
-        {
-            var res = new List<TeamSession>();
-            var currentTime = new DateTime(from.Year, from.Month, from.Day, from.Hour, 0, 0, from.Kind); // hourly rounded time
-            var latestPossibleStart = from + duration - openTeam.Duration;
-            while (currentTime <= latestPossibleStart)
-            {
-                if (currentTime.TimeOfDay >= FirstSessionOfDay && currentTime.TimeOfDay + openTeam.Duration <= LastSessionOfDayEnd)
-                {
-                    res.Add(new TeamSession { StartTime = currentTime, TeamId=openTeam.Id });
-                }
-                currentTime = currentTime + openTeam.Duration;
-            }
-            return res;
-        }
-    }
 
     public class TimeSlot
     {
@@ -268,118 +158,82 @@ namespace BookingApp.Data
 
     public class BookingService
     {
+        private readonly BookingStorage _bookingStorage;
+        private readonly TeamService _teamService;
+        private readonly AuthenticationStateProvider _authenticationStateProvider;
+        private readonly UserManager<ApplicationUser> _userManager;
 
-        private BookingStorage bookingStorage;
-        private readonly TeamService teamService;
-        private readonly SpaceSchedule spaceSchedule;
-        private readonly AuthenticationStateProvider authenticationStateProvider;
-        private readonly UserManager<ApplicationUser> userManager;
-        private readonly OpenSessionGenerator openSessionGenerator;
-
-        private readonly SemaphoreSlim reservationLock = new SemaphoreSlim(1);
+        private readonly SemaphoreSlim _reservationLock = new SemaphoreSlim(1);
 
         public BookingService(AuthenticationStateProvider authenticationStateProvider, UserManager<ApplicationUser> userManager, BookingStorage bookingStorage, TeamService teamService)
         {
-            this.authenticationStateProvider = authenticationStateProvider;
-            this.userManager = userManager;
-            this.bookingStorage = bookingStorage;
-            this.teamService = teamService;
-            this.spaceSchedule = new SpaceSchedule(teamSessionGenerator, teamService);
-            this.openSessionGenerator = new OpenSessionGenerator(teamService.GetTeam("open"));
+            this._authenticationStateProvider = authenticationStateProvider;
+            this._userManager = userManager;
+            this._bookingStorage = bookingStorage;
+            this._teamService = teamService;
         }
 
         public async Task MakeTeamReservation(TeamSession session)
         {
-            var state = await authenticationStateProvider.GetAuthenticationStateAsync();
-            var userId = (await userManager.GetUserAsync(state.User)).Id;
-            int maxTeamReservations = 0;
-            if (teamService.GetTeam(session.TeamId).Limits.TryGetValue(TeamLimit.ActiveBookings, out maxTeamReservations))
+            var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
+            var userId = (await _userManager.GetUserAsync(state.User)).Id;
+            if (_teamService.GetTeam(session.TeamId).Limits.TryGetValue(TeamLimit.ActiveBookings, out var maxTeamReservations))
             {
-                await reservationLock.WaitAsync();
+                await _reservationLock.WaitAsync();
                 try
                 {
-                    var reservationsForUser = bookingStorage.GetReservationsFor(userId);
+                    var reservationsForUser = _bookingStorage.GetReservationsFor(userId);
                     if (reservationsForUser.Count(e => e.TeamId == session.TeamId && e.StartTime > DateTime.Now) < maxTeamReservations)
-                        await bookingStorage.AddTeamReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId });
+                        await _bookingStorage.AddTeamReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId });
                     else
                         return;
                 }
                 finally
                 {
-                    reservationLock.Release();
+                    _reservationLock.Release();
                 }
             }
             else 
             {
-                await bookingStorage.AddTeamReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId });
+                await _bookingStorage.AddTeamReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId });
             }
             OnBookingsChanged();
         }
 
         public async Task CancelUserReservation(UserReservation reservation)
         {
-            var state = await authenticationStateProvider.GetAuthenticationStateAsync();
-            var userId = (await userManager.GetUserAsync(state.User)).Id;
-            await bookingStorage.RemoveReservation(userId, reservation);
+            var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
+            var userId = (await _userManager.GetUserAsync(state.User)).Id;
+            await _bookingStorage.RemoveReservation(userId, reservation);
             OnBookingsChanged();
         }
 
         public async Task CancelTeamReservation(TeamSession session)
         {
-            var state = await authenticationStateProvider.GetAuthenticationStateAsync();
-            var userId = (await userManager.GetUserAsync(state.User)).Id;
-            await bookingStorage.RemoveReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId });
+            var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
+            var userId = (await _userManager.GetUserAsync(state.User)).Id;
+            await _bookingStorage.RemoveReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId });
             OnBookingsChanged();
         }
 
         public async Task<int> GetLoggedOnUserPositionForReservedSession(UserReservation userReservation)
         {
-            var allreservations= await bookingStorage.GetReservationsForSession(userReservation.TeamId, userReservation.StartTime);
-            var state = await authenticationStateProvider.GetAuthenticationStateAsync();
-            var userId = (await userManager.GetUserAsync(state.User)).Id;
+            var allreservations= await _bookingStorage.GetReservationsForSession(userReservation.TeamId, userReservation.StartTime);
+            var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
+            var userId = (await _userManager.GetUserAsync(state.User)).Id;
             return allreservations.IndexOf(userId);
         }
 
         public async Task<IEnumerable<UserReservation>> GetLoggedOnUserReservations()
         {
-            var state = await authenticationStateProvider.GetAuthenticationStateAsync();
-            var userId = (await userManager.GetUserAsync(state.User)).Id;
-            return bookingStorage.GetReservationsFor(userId);
-        }
-
-        private static WeeklyTeamSchedule ActiveSchedule = new WeeklyTeamSchedule
-        {
-            ValidityStart = new DateTime(2020, 12, 1),
-            ValidityEnd = new DateTime(2021, 12, 31),
-            ScheduledTeams = new List<WeeklyScheduledTeam> {
-                new WeeklyScheduledTeam { Day = DayOfWeek.Monday, TimeOfDay = TimeSpan.FromHours(16) + TimeSpan.FromMinutes(30), TeamId = "1"},
-                new WeeklyScheduledTeam { Day = DayOfWeek.Monday, TimeOfDay = TimeSpan.FromHours(18), TeamId = "2"},
-                new WeeklyScheduledTeam { Day = DayOfWeek.Saturday, TimeOfDay = TimeSpan.FromHours(18), TeamId = "3"},
-                new WeeklyScheduledTeam { Day = DayOfWeek.Saturday, TimeOfDay = TimeSpan.FromHours(17), TeamId = "1"},
-            }
-        };
-
-        // this assumes that from is the start of the day and that teams do not span across days
-        public Task<IEnumerable<TeamSession>> GetOpenSessions(DateTime from, TimeSpan duration)
-        {
-            return Task.FromResult(openSessionGenerator.GetHourlyOpenSessions(from, duration));
-        }
-
-        public int GetFreeSpace(TimeSlot timeSlot)
-        {
-            return spaceSchedule.GetFreeSpace(timeSlot);
-        }
-
-        private readonly TeamSessionGenerator teamSessionGenerator = new TeamSessionGenerator(ActiveSchedule.ScheduledTeams);
-
-        public IEnumerable<TeamSession> GetTeamSessions(DateTime from, TimeSpan duration)
-        {
-            return teamSessionGenerator.GetTeamSlots(from, duration);
+            var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
+            var userId = (await _userManager.GetUserAsync(state.User)).Id;
+            return _bookingStorage.GetReservationsFor(userId);
         }
 
         public Task<IEnumerable<BookedTimeSlot>> GetAllReservations(DateTime from, TimeSpan duration)
         {
-            return bookingStorage.GetAllReservationsBetweenAsync(from, duration);
+            return _bookingStorage.GetAllReservationsBetweenAsync(from, duration);
         }
 
         public delegate void BookingsChangedDelegate();
@@ -387,56 +241,6 @@ namespace BookingApp.Data
         public static event BookingsChangedDelegate OnBookingsChanged = delegate { };
     }
 
-    public class TeamService
-    {
-        private readonly Dictionary<string, Team> teams = new Dictionary<string, Team>();
-
-        public static readonly Team Open = new Team
-        {
-            Duration = TimeSpan.FromHours(1),
-            Id = "open",
-            Name = "Open",
-            Limits = new Dictionary<TeamLimit, int>()
-        };
-
-        public TeamService()
-        {
-            teams.Add("open", Open);
-            teams.Add("1", new Team
-            {
-                Duration = TimeSpan.FromMinutes(90),
-                Id = "1",
-                Name = "Beginner",
-                Limits =
-                new Dictionary<TeamLimit, int>
-                {
-                    { TeamLimit.Size, 1},
-                    { TeamLimit.ActiveBookings, 2}
-                }
-            });
-            teams.Add("2", new Team { Duration = TimeSpan.FromMinutes(90), Id = "2", Name = "Intermediate",
-                Limits =
-                new Dictionary<TeamLimit, int>
-                {
-                    { TeamLimit.Size, 2},
-                    { TeamLimit.ActiveBookings, 2}
-                }
-            });
-            teams.Add("3", new Team { Duration = TimeSpan.FromMinutes(90), Id = "3", Name = "Elite",
-                Limits =
-                new Dictionary<TeamLimit, int>
-                {
-                    { TeamLimit.Size, 3},
-                    { TeamLimit.ActiveBookings, 2}
-                }
-            });
-        }
-
-        public Team GetTeam(string id)
-        {
-            return teams[id];
-        }
-    }
 
     public class Team
     {
@@ -451,11 +255,5 @@ namespace BookingApp.Data
     {
         Size=1,
         ActiveBookings=2
-    }
-
-    public class IntegerBookingLimit
-    {
-        public TeamLimit Type { get; set; }
-        public int Value { get; set; }
     }
 }

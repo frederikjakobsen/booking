@@ -55,6 +55,7 @@ namespace BookingApp
             services.AddScoped<AuthenticationStateProvider, RevalidatingIdentityAuthenticationStateProvider<ApplicationUser>>();
             services.AddScoped<BookingService>();
             services.AddSingleton<TeamService>();
+            services.AddSingleton<ScheduleService>();
             services.AddScoped<UserService>();
             services.AddSingleton<BookingStorage>();
             services.AddScoped<UserManagerService>();

@@ -2,6 +2,7 @@
 @using System.Globalization
 @inject BookingService BookingService
 @inject TeamService TeamService
+@inject ScheduleService ScheduleService
 @attribute [Authorize]
 
 <p>
@@ -45,6 +46,7 @@ else
     private readonly string openSessionLink = $"/opensessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
     private readonly string teamSessionLink = $"/teamsessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
 
+    private SpaceSchedule _spaceSchedule;
 
     class OwnReservationUi
     {
@@ -64,11 +66,13 @@ else
         {
             return sizeLimit;
         }
-        return BookingService.GetFreeSpace(new TimeSlot { Duration = team.Duration, StartTime = startTime });
+        return _spaceSchedule.GetFreeSpace(new TimeSlot { Duration = team.Duration, StartTime = startTime });
     }
 
-    protected async override Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
     {
+        _spaceSchedule = new SpaceSchedule(ScheduleService, TeamService);
+        
         var userReservations = (await BookingService.GetLoggedOnUserReservations()).OrderBy(e => e.StartTime);
         foreach (var userres in userReservations)
         {

@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Threading.Tasks;
 
 namespace BookingApp.Shared
 {
@@ -39,32 +38,50 @@ namespace BookingApp.Shared
 
     public class ResolvedTeamSession
     {
-        public TeamSession session { get; set; }
+        public TimeSlot TimeSlot { get; set; }
         public Team team { get; set; }
-        public int FreeSpace { get; set; }
+        
+        public int SizeLimit { get; set; }
+
+        public TeamSession ToSession() =>
+            new TeamSession
+            {
+                StartTime = TimeSlot.StartTime,
+                TeamId = team.Id
+            };
     }
 
     public class SessionResolver
     {
-        private readonly BookingService bookingService;
+        private readonly SpaceSchedule _spaceSchedule;
         private readonly TeamService teamService;
 
-        public SessionResolver(BookingService bookingService, TeamService teamService)
+        public SessionResolver(ScheduleService scheduleService, TeamService teamService)
         {
-            this.bookingService = bookingService;
+            _spaceSchedule = new SpaceSchedule(scheduleService,teamService);
             this.teamService = teamService;
+        }
+        
+        private int GetSizeLimit(Team team, TimeSlot startTime)
+        {
+            if(team.Limits.TryGetValue(TeamLimit.Size, out var sizeLimit))
+            {
+                return sizeLimit;
+            }
+            return _spaceSchedule.GetFreeSpace(startTime);
         }
 
         public IEnumerable<ResolvedTeamSession> ResolveSessions(IEnumerable<TeamSession> sessions)
         {
             return sessions.Select(e =>
-             {
+            {
                  var team = teamService.GetTeam(e.TeamId);
+                 var slot = new TimeSlot {StartTime = e.StartTime, Duration = team.Duration};
                  return new ResolvedTeamSession
                  {
                      team = team,
-                     session = e,
-                     FreeSpace = bookingService.GetFreeSpace(new TimeSlot { StartTime = e.StartTime, Duration = team.Duration })
+                     TimeSlot = slot,
+                     SizeLimit = GetSizeLimit(team, slot)
                  };
              });
         }
@@ -72,21 +89,24 @@ namespace BookingApp.Shared
 
     public class TeamSessionCalendar:ISessionCalendar
     {
-        private readonly BookingService bookingService;
-        public TeamSessionCalendar(BookingService bookingService)
+        private readonly ScheduleService _scheduleService;
+        private readonly TeamSessionGenerator _sessionGenerator;
+
+        public TeamSessionCalendar(ScheduleService scheduleService)
         {
-            this.bookingService = bookingService;
+            _scheduleService = scheduleService;
+            _sessionGenerator = new TeamSessionGenerator(scheduleService.ActiveSchedule.ScheduledTeams);
         }
 
         public IEnumerable<TeamSession> DailySessions(DateTime from)
         {
             var teamsessiondate = from;
-            var sessions = (bookingService.GetTeamSessions(from, TimeSpan.FromDays(1))).ToList();
+            var sessions = _sessionGenerator.GetTeamSlots(from, TimeSpan.FromDays(1)).ToList();
 
             while (!sessions.Any())
             {
                 teamsessiondate += TimeSpan.FromDays(1);
-                sessions = (bookingService.GetTeamSessions(teamsessiondate, TimeSpan.FromDays(1))).ToList();
+                sessions = _sessionGenerator.GetTeamSlots(teamsessiondate, TimeSpan.FromDays(1)).ToList();
             }
             return sessions.OrderBy(e => e.StartTime);
         }
@@ -98,7 +118,7 @@ namespace BookingApp.Shared
             while (true)
             {
                 teamsessiondate += TimeSpan.FromDays(1);
-                if (bookingService.GetTeamSessions(teamsessiondate, TimeSpan.FromDays(1)).Any())
+                if (_sessionGenerator.GetTeamSlots(teamsessiondate, TimeSpan.FromDays(1)).Any())
                     return teamsessiondate;
             }
         }
@@ -110,7 +130,7 @@ namespace BookingApp.Shared
             while (true)
             {
                 teamsessiondate -= TimeSpan.FromDays(1);
-                if (bookingService.GetTeamSessions(teamsessiondate, TimeSpan.FromDays(1)).Any())
+                if (_sessionGenerator.GetTeamSlots(teamsessiondate, TimeSpan.FromDays(1)).Any())
                     return teamsessiondate;
             }
         }
@@ -128,14 +148,14 @@ namespace BookingApp.Shared
 
     public class OpenSessionCalendar:ISessionCalendar
     {
-        private readonly Team openTeam;
+        private readonly Team _openTeam;
 
-        private readonly TimeSpan FirstSessionOfDay = TimeSpan.FromHours(6);
-        private readonly TimeSpan LastSessionOfDayEnd = TimeSpan.FromHours(23);
+        private readonly TimeSpan _firstSessionOfDay = TimeSpan.FromHours(6);
+        private readonly TimeSpan _lastSessionOfDayEnd = TimeSpan.FromHours(23);
 
         public OpenSessionCalendar(Team openTeam)
         {
-            this.openTeam = openTeam;
+            this._openTeam = openTeam;
         }
 
 
@@ -143,14 +163,14 @@ namespace BookingApp.Shared
         {
             var res = new List<TeamSession>();
             var currentTime = new DateTime(from.Year, from.Month, from.Day, from.Hour, 0, 0, from.Kind); // hourly rounded time
-            var latestPossibleStart = from + TimeSpan.FromDays(1) - openTeam.Duration;
+            var latestPossibleStart = from + TimeSpan.FromDays(1) - _openTeam.Duration;
             while (currentTime <= latestPossibleStart)
             {
-                if (currentTime.TimeOfDay >= FirstSessionOfDay && currentTime.TimeOfDay + openTeam.Duration <= LastSessionOfDayEnd)
+                if (currentTime.TimeOfDay >= _firstSessionOfDay && currentTime.TimeOfDay + _openTeam.Duration <= _lastSessionOfDayEnd)
                 {
-                    res.Add(new TeamSession { StartTime = currentTime, TeamId=openTeam.Id });
+                    res.Add(new TeamSession { StartTime = currentTime, TeamId=_openTeam.Id });
                 }
-                currentTime = currentTime + openTeam.Duration;
+                currentTime = currentTime + _openTeam.Duration;
             }
             return res;
         }
