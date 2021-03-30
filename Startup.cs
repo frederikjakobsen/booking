@@ -36,6 +36,9 @@ namespace BookingApp
             });
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlite ("DataSource=app.db"));
+            services.AddDbContext<BookingsDbContext>(options =>
+                options.UseSqlite ("DataSource=bookings.db"));
+
             services.AddDefaultIdentity<ApplicationUser>()
                 .AddRoles<IdentityRole>()
                 .AddEntityFrameworkStores<ApplicationDbContext>()
@@ -57,7 +60,7 @@ namespace BookingApp
             services.AddSingleton<TeamService>();
             services.AddSingleton<ScheduleService>();
             services.AddScoped<UserService>();
-            services.AddSingleton<BookingStorage>();
+            services.AddScoped<IBookingStorage,EfBookingStorage>();
             services.AddScoped<UserManagerService>();
         }
 
