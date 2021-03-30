@@ -123,20 +123,20 @@ namespace BookingApp.Data
 
         public async Task<int> GetLoggedOnUserPositionForReservedSession(UserReservation userReservation)
         {
-            var allreservations= await _bookingStorage.GetReservationsForSession(userReservation.TeamId, userReservation.StartTime);
+            var allReservations= await _bookingStorage.GetReservationsForSession(userReservation.TeamId, userReservation.StartTime);
             var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
             var userId = (await _userManager.GetUserAsync(state.User)).Id;
-            return allreservations.IndexOf(userId);
+            return allReservations.IndexOf(userId);
         }
 
-        public async Task<IEnumerable<UserReservation>> GetLoggedOnUserReservations()
+        public async Task<List<UserReservation>> GetLoggedOnUserReservations()
         {
             var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
             var userId = (await _userManager.GetUserAsync(state.User)).Id;
             return await _bookingStorage.GetReservationsFor(userId);
         }
 
-        public async Task<IEnumerable<BookedTimeSlot>> GetAllReservations(DateTime from, TimeSpan duration)
+        public async Task<List<BookedTimeSlot>> GetAllReservations(DateTime from, TimeSpan duration)
         {
             return await _bookingStorage.GetAllReservationsBetweenAsync(from, duration);
         }

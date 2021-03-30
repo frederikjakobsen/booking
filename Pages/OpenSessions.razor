@@ -1,5 +1,6 @@
 ﻿@page "/opensessions/{Date:datetime}"
 @inject ScheduleService ScheduleService
+@attribute [Authorize]
 
 <SessionBooking Date="Date" Calendar="@_calendar" Title="Open session booking" SessionPath="opensessions"></SessionBooking>
 

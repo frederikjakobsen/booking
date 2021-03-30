@@ -8,7 +8,7 @@
 <h2>@Title</h2>
 
 
-@if (sessions == null)
+@if (_sessions == null)
 {
 <p>Loading sessions..</p>
 }
@@ -19,18 +19,18 @@ else
         <th colspan="4" class="text-center">@Date.ToString("MMMM", CultureInfo.InvariantCulture)</th>
     </tr>
     <tr>
-        <th>@if (previousDayUrl != null)
-                {<a href="@previousDayUrl">earlier</a>}
+        <th>@if (_previousDayUrl != null)
+                {<a href="@_previousDayUrl">earlier</a>}
                 else
                 {<span class="text-muted">earlier</span>}</th>
         <th colspan="2" class="text-center">@Date.Day</th>
-        <th class="text-right"><a href="@nextDayUrl">later</a></th>
+        <th class="text-right"><a href="@_nextDayUrl">later</a></th>
     </tr>
     <tr>
         <th colspan="4" class="text-center">@Date.DayOfWeek</th>
     </tr>
 
-    @foreach (var session in sessions)
+    @foreach (var session in _sessions)
         {
     <tr>
         <td>@session.StartTime</td>
@@ -38,7 +38,7 @@ else
         <td class="text-center"><button @onclick="()=>ToggleReservationsViewFor(session)">@session.Available/@session.Size</button></td>
         <td><button disabled=@session.Disabled @onclick="()=>session.ToggleBookingState()">@session.BookingStateToggleText</button></td>
     </tr>
-    @if (session.Equals(selectedSession))
+    @if (session.Equals(_selectedSession))
             {
     <tr>
         <td colspan="4"><SessionInfo userIds=session.Reservations Size=session.Size /></td>
@@ -60,29 +60,29 @@ else
         [Parameter]
         public string SessionPath { get; set; }
 
-    private string nextDayUrl = null;
-    private string previousDayUrl = null;
-    private List<UserReservation> ownReservations = new List<UserReservation>();
-    private IEnumerable<BookedTimeSlot> reservations = null;
+    private string _nextDayUrl = null;
+    private string _previousDayUrl = null;
+    private List<UserReservation> _ownReservations = new List<UserReservation>();
+    private List<BookedTimeSlot> _reservations = null;
 
     [Parameter]
     public DateTime Date { get; set; }
 
 
-    private IEnumerable<SessionUiItem> sessions = null;
+    private IEnumerable<SessionUiItem> _sessions = null;
 
-    private SessionUiItem selectedSession = null;
+    private SessionUiItem _selectedSession = null;
 
     private void ToggleReservationsViewFor(SessionUiItem item)
     {
-        if (item.Equals(selectedSession))
-            selectedSession = null;
+        if (item.Equals(_selectedSession))
+            _selectedSession = null;
         else
-            selectedSession = item;
+            _selectedSession = item;
         StateHasChanged();
     }
 
-    public delegate Task BookingStateToggler();
+    private delegate Task BookingStateToggler();
 
     class SessionUiItem
     {
@@ -120,23 +120,23 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        selectedSession = null;
+        _selectedSession = null;
         var sessionNavigator = new SessionNavigator(Calendar, SessionPath);
         var sessionResolver = new SessionResolver(ScheduleService, TeamService);
 
         var sessionsForDate =  Calendar.DailySessions(SanitizeSessionDate(Date)).ToList();
         Date = RoundToDays(sessionsForDate.First().StartTime);
 
-        nextDayUrl = sessionNavigator.GetNextSessionDayUrl(Date);
-        previousDayUrl = sessionNavigator.GetPreviousSessionDayUrl(Date);
+        _nextDayUrl = sessionNavigator.GetNextSessionDayUrl(Date);
+        _previousDayUrl = sessionNavigator.GetPreviousSessionDayUrl(Date);
 
-        reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
+        _reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
         var sessionData = sessionResolver.ResolveSessions(sessionsForDate);
 
-        sessions = sessionData.Where(e => e.TimeSlot.StartTime +e.TimeSlot.Duration >= DateTime.Now).Select(e =>
+        _sessions = sessionData.Where(e => e.TimeSlot.StartTime +e.TimeSlot.Duration >= DateTime.Now).Select(e =>
         {
-            var reservationsForSession = GetReservations(e.ToSession());
-            var isBooked = ownReservations.Where(o=>o.StartTime == e.TimeSlot.StartTime && o.TeamId == e.team.Id).Any();
+            var reservationsForSession = GetReservations(e.ToSession()).ToList();
+            var isBooked = _ownReservations.Any(o => o.StartTime == e.TimeSlot.StartTime && o.TeamId == e.team.Id);
 
             BookingStateToggler toggleState = async () => await Book(e.ToSession());
             if (isBooked)
@@ -155,7 +155,7 @@ else
             };
             if (!isBooked && e.team.Limits.TryGetValue(TeamLimit.ActiveBookings, out var maxActiveBookings))
             {
-                res.Disabled = ownReservations.Count(reservation => reservation.StartTime > DateTime.Now && reservation.TeamId == e.team.Id) >= maxActiveBookings;
+                res.Disabled = _ownReservations.Count(reservation => reservation.StartTime > DateTime.Now && reservation.TeamId == e.team.Id) >= maxActiveBookings;
             }
 
             return res;
@@ -165,14 +165,14 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        ownReservations = (await BookingService.GetLoggedOnUserReservations()).ToList();
+        _ownReservations = (await BookingService.GetLoggedOnUserReservations()).ToList();
         BookingService.OnBookingsChanged += this.BookingsChanged;
     }
 
 
     private IEnumerable<string> GetReservations(TeamSession session)
     {
-        var res = reservations.Where(reservation => reservation.StartTime == session.StartTime);
+        var res = _reservations.Where(reservation => reservation.StartTime == session.StartTime).ToList();
         if (!res.Any()) return Enumerable.Empty<string>();
         var teamReservations = res.Select(e => e.TeamReservations).Single();
         if (teamReservations.TryGetValue(session.TeamId, out var reservationsForTeam))
@@ -185,19 +185,19 @@ else
     private async Task Book(TeamSession sessionToBook)
     {
         await BookingService.MakeTeamReservation(sessionToBook);
-        ownReservations.Add(new UserReservation { StartTime = sessionToBook.StartTime, TeamId = sessionToBook.TeamId });
+        _ownReservations.Add(new UserReservation { StartTime = sessionToBook.StartTime, TeamId = sessionToBook.TeamId });
     }
 
     private async Task CancelBooking(TeamSession sessionToBook)
     {
         await BookingService.CancelTeamReservation(sessionToBook);
-        ownReservations.RemoveAll(e => e.StartTime == sessionToBook.StartTime && e.TeamId == sessionToBook.TeamId);
+        _ownReservations.RemoveAll(e => e.StartTime == sessionToBook.StartTime && e.TeamId == sessionToBook.TeamId);
     }
 
     private async void BookingsChanged()
     {
-        reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
-        await InvokeAsync(() => StateHasChanged());
+        _reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
+        await InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
