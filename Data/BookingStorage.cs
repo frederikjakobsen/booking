@@ -160,8 +160,10 @@ namespace BookingApp.Data
 
         public async Task RemoveReservation(string userId, UserReservation reservation)
         {
-            var itemToRemove = await db.UserReservations.FirstAsync(res =>
+            var itemToRemove = await db.UserReservations.FirstOrDefaultAsync(res =>
                 res.UserId == userId && res.TeamId == reservation.TeamId && res.StartTime == reservation.StartTime);
+            if (itemToRemove == null)
+                return;
             db.Remove(itemToRemove);
             await db.SaveChangesAsync();
         }

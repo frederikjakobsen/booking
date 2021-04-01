@@ -115,10 +115,7 @@ namespace BookingApp.Data
 
         public async Task CancelTeamReservation(TeamSession session)
         {
-            var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
-            var userId = (await _userManager.GetUserAsync(state.User)).Id;
-            await _bookingStorage.RemoveReservation(userId, new UserReservation { StartTime = session.StartTime, TeamId = session.TeamId });
-            OnBookingsChanged();
+            await CancelUserReservation(new UserReservation {StartTime = session.StartTime, TeamId = session.TeamId});
         }
 
         public async Task<int> GetLoggedOnUserPositionForReservedSession(UserReservation userReservation)
