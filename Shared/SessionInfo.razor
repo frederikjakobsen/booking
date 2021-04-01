@@ -1,12 +1,12 @@
 ﻿@inject UserService UserService
 
-@if (userDescriptions.Any()) 
+@if (_userDescriptions.Any()) 
     {<text>Reservations:</text>}
 else
     {<em>no reservations</em>}
 
 <table>
-@foreach (var userDescription in userDescriptions)
+@foreach (var userDescription in _userDescriptions)
 {
     <tr>
         <td>@userDescription.UserName</td>
@@ -17,12 +17,12 @@ else
 
 @code {
     [Parameter]
-    public IEnumerable<string> userIds { get; set; }
+    public IEnumerable<string> UserIds { get; set; }
 
     [Parameter]
     public int Size { get; set; }
 
-    private IEnumerable<UserReservationDescription> userDescriptions { get; set; }
+    private IEnumerable<UserReservationDescription> _userDescriptions;
 
     class UserReservationDescription
     {
@@ -30,13 +30,12 @@ else
         public string QueueStatus { get; set; }
     }
 
-    protected override Task OnParametersSetAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        var users = UserService.GetUsers(userIds);
-        userDescriptions = 
+        var users = (await UserService.GetUsersAsync(UserIds)).ToList();
+        _userDescriptions = 
     users.Take(Size).Select(e=>new UserReservationDescription{UserName=e})
-    .Concat(users.Skip(Size).Select(e=>new UserReservationDescription {UserName=e,QueueStatus="(queue)" }));
-        return Task.CompletedTask;
+    .Concat(users.Skip(Size).Select(e=>new UserReservationDescription {UserName=e,QueueStatus="(queue)" }));;
     }
 
 }

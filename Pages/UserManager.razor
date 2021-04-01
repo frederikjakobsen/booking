@@ -4,7 +4,7 @@
 
 <h1>User Manager</h1>
 
-@if (users == null)
+@if (_users == null)
 {
     <p>Loading users..</p>
 } else
@@ -14,7 +14,7 @@
             <th></th>
             <th></th>
         </tr>
-  @foreach (var user in users)
+  @foreach (var user in _users)
   {
       <tr>
             <td>@user.Name</td>
@@ -33,13 +33,18 @@
               }
 
           </td>
+                    <td>@if (!user.Approved)
+                        {
+                            <button @onclick="() => DeleteUser(user)">Delete</button>
+                        }
+                    </td>
         </tr>
   }
       </table>
 }
 
 @code {
-    private IEnumerable<BookingUser> users;
+    private IEnumerable<BookingUser> _users;
 
     private async Task ApproveUser(BookingUser user)
     {
@@ -52,9 +57,15 @@
         await UserManagerService.RejectUser(user);
         user.Approved = false;
     }
+    
+    private async Task DeleteUser(BookingUser user)
+    {
+        await UserManagerService.DeleteUser(user);
+        _users = await UserManagerService.GetUsers();
+    }
 
     protected override async Task OnInitializedAsync()
     {
-        users = await UserManagerService.GetUsers();
+        _users = await UserManagerService.GetUsers();
     }
 }

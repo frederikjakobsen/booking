@@ -21,14 +21,16 @@ namespace BookingApp.Data
     public class UserManagerService
     {
 
-        public UserManagerService(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager)
+        public UserManagerService(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, BookingService bookingService)
         {
             _userManager = userManager;
             _roleManager = roleManager;
+            _bookingService = bookingService;
         }
 
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly RoleManager<IdentityRole> _roleManager;
+        private readonly BookingService _bookingService;
 
         private static async Task<BookingUser> InitUser(UserManager<ApplicationUser> userManager, ApplicationUser user)
         {
@@ -52,6 +54,15 @@ namespace BookingApp.Data
         {
             var idUser = await _userManager.FindByIdAsync(user.OwnerId);
             await EnsureNoRole(idUser, "approved");
+        }
+        
+        // note that the user does not get signed out by calling this
+        public async Task DeleteUser(BookingUser user)
+        {
+            await _bookingService.CancelAllUserReservations(user.OwnerId);
+            var idUser = await _userManager.FindByIdAsync(user.OwnerId);
+            await _userManager.UpdateSecurityStampAsync(idUser);
+            await _userManager.DeleteAsync(idUser);
         }
 
         private async Task EnsureNoRole(ApplicationUser user, string role)

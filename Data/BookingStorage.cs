@@ -15,6 +15,7 @@ namespace BookingApp.Data
         Task<List<BookedTimeSlot>> GetAllReservationsBetweenAsync(DateTime from, TimeSpan duration);
         Task RemoveReservation(string userId, UserReservation reservation);
         Task AddReservation(string userId, UserReservation reservation);
+        Task RemoveAllReservations(string userId);
     }
 
     public class BookingStorage : IBookingStorage
@@ -109,6 +110,11 @@ namespace BookingApp.Data
                 reservationLock.Release();
             }
         }
+
+        public Task RemoveAllReservations(string userId)
+        {
+            throw new NotImplementedException();
+        }
     }
     
     
@@ -178,6 +184,13 @@ namespace BookingApp.Data
                 EndTime = reservation.StartTime+_teamService.GetTeam(reservation.TeamId).Duration
             };
             db.Add(reservationEntity);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task RemoveAllReservations(string userId)
+        {
+            var allReservations= db.UserReservations.Where(e => e.UserId == userId);
+            db.UserReservations.RemoveRange(allReservations);
             await db.SaveChangesAsync();
         }
     }

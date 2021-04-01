@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 
 
 namespace BookingApp.Data
@@ -20,12 +21,14 @@ namespace BookingApp.Data
 
         private readonly UserManager<ApplicationUser> userManager;
 
-        public IEnumerable<string> GetUsers(IEnumerable<string> userIds)
+        public async Task<IEnumerable<string>> GetUsersAsync(IEnumerable<string> userIds)
         {
             var res = new List<string>();
             foreach(var userId in userIds)
             {
-                res.Add(userManager.Users.First(user => user.Id == userId).Name);
+                var user = await userManager.Users.FirstOrDefaultAsync(user => user.Id == userId);
+                if (user!=null)
+                    res.Add(user.Name);
             }
             return res;
         }

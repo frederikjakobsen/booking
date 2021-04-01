@@ -112,6 +112,12 @@ namespace BookingApp.Data
             await _bookingStorage.RemoveReservation(userId, reservation);
             OnBookingsChanged();
         }
+        
+        public async Task CancelAllUserReservations(string userId)
+        {
+            await _bookingStorage.RemoveAllReservations(userId);
+            OnBookingsChanged();
+        }
 
         public async Task CancelTeamReservation(TeamSession session)
         {
