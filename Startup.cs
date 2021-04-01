@@ -70,7 +70,6 @@ namespace BookingApp
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
-                app.UseDatabaseErrorPage();
                 app.UseForwardedHeaders();
             }
             else
