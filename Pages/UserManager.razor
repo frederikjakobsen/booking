@@ -1,5 +1,4 @@
 ﻿@page "/usermanager"
-@using BookingApp.Data
 @inject UserManagerService UserManagerService 
 @attribute [Authorize(Roles = "approved")]
 
@@ -19,17 +18,21 @@
   {
       <tr>
             <td>@user.Name</td>
-            <td>@user.Email</td>
-            <td>@if (!user.Approved) {
-            <button @onclick="()=>ApproveUser(user)">Approve</button>
-        }
-        else
-        {
-            <text>Approved</text>
-            <button @onclick="()=>RejectUser(user)">Reject</button>
-        }
-         
-    </td>
+          <td>@user.Email</td>
+          <td>@(user.EmailConfirmed ? "confirmed" : "" )</td>
+          <td>
+              
+              @if (!user.Approved)
+              {
+                  <button @onclick="() => ApproveUser(user)">Approve</button>
+              }
+              else
+              {
+                  <text>Approved</text>
+                  <button @onclick="() => RejectUser(user)">Reject</button>
+              }
+
+          </td>
         </tr>
   }
       </table>
@@ -50,7 +53,7 @@
         user.Approved = false;
     }
 
-    protected async override Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
     {
         users = await UserManagerService.GetUsers();
     }

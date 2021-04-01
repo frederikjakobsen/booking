@@ -1,10 +1,9 @@
-using BookingApp.Areas.Identity;
-using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using BookingApp.Areas.Identity;
+using Microsoft.AspNetCore.Identity;
 
 namespace BookingApp.Data
 {
@@ -15,54 +14,54 @@ namespace BookingApp.Data
 
         public string Email { get; set; }
         public bool Approved { get; set; }
+        
+        public bool EmailConfirmed { get; set; }
     }
 
     public class UserManagerService
     {
 
-        public UserManagerService(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, AuthenticationStateProvider authenticationStateProvider)
+        public UserManagerService(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager)
         {
-            this.userManager = userManager;
-            this.roleManager = roleManager;
-            this.authenticationStateProvider = authenticationStateProvider;
+            _userManager = userManager;
+            _roleManager = roleManager;
         }
 
-        private readonly UserManager<ApplicationUser> userManager;
-        private readonly RoleManager<IdentityRole> roleManager;
-        private readonly AuthenticationStateProvider authenticationStateProvider;
+        private readonly UserManager<ApplicationUser> _userManager;
+        private readonly RoleManager<IdentityRole> _roleManager;
 
         private static async Task<BookingUser> InitUser(UserManager<ApplicationUser> userManager, ApplicationUser user)
         {
-            return new BookingUser { OwnerId = user.Id, Name = user.Name, Email = user.Email, Approved = await userManager.IsInRoleAsync(user, "approved") };
+            return new() { OwnerId = user.Id, Name = user.Name, Email = user.Email, Approved = await userManager.IsInRoleAsync(user, "approved"), EmailConfirmed = user.EmailConfirmed};
         }
 
         public async Task<IEnumerable<BookingUser>> GetUsers()
         {
 
-            var res = userManager.Users.Select(user => InitUser(userManager, user));
+            var res = _userManager.Users.Select(user => InitUser(_userManager, user));
             return await Task.WhenAll(res);
         }
 
         public async Task ApproveUser(BookingUser user)
         {
-            var idUser= await userManager.FindByIdAsync(user.OwnerId);
+            var idUser= await _userManager.FindByIdAsync(user.OwnerId);
             await EnsureRole(idUser, "approved");
         }
 
         public async Task RejectUser(BookingUser user)
         {
-            var idUser = await userManager.FindByIdAsync(user.OwnerId);
+            var idUser = await _userManager.FindByIdAsync(user.OwnerId);
             await EnsureNoRole(idUser, "approved");
         }
 
         private async Task EnsureNoRole(ApplicationUser user, string role)
         {
-            if (!await roleManager.RoleExistsAsync(role))
+            if (!await _roleManager.RoleExistsAsync(role))
             {
                 return;
             }
 
-            var IR = await userManager.RemoveFromRoleAsync(user, role);
+            var IR = await _userManager.RemoveFromRoleAsync(user, role);
             if (!IR.Succeeded)
                 throw new Exception("Failed to remove role");
         }
@@ -71,14 +70,14 @@ namespace BookingApp.Data
         {
             IdentityResult IR = null;
 
-            if (!await roleManager.RoleExistsAsync(role))
+            if (!await _roleManager.RoleExistsAsync(role))
             {
-                IR = await roleManager.CreateAsync(new IdentityRole(role));
+                IR = await _roleManager.CreateAsync(new IdentityRole(role));
                 if (!IR.Succeeded)
                     throw new Exception("Failed to create role");
             }
 
-            IR = await userManager.AddToRoleAsync(user, role);
+            IR = await _userManager.AddToRoleAsync(user, role);
             if (!IR.Succeeded)
                 throw new Exception("Failed to add role");
         }
