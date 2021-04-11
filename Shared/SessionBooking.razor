@@ -63,7 +63,6 @@ else
     private string _nextDayUrl = null;
     private string _previousDayUrl = null;
     private List<UserReservation> _ownReservations = new List<UserReservation>();
-    private List<BookedTimeSlot> _reservations = null;
 
     [Parameter]
     public DateTime Date { get; set; }
@@ -72,6 +71,8 @@ else
     private IEnumerable<SessionUiItem> _sessions = null;
 
     private SessionUiItem _selectedSession = null;
+    private IEnumerable<ResolvedTeamSession> _sessionData;
+    private List<BookedTimeSlot> _reservations;
 
     private void ToggleReservationsViewFor(SessionUiItem item)
     {
@@ -118,6 +119,51 @@ else
         return res;
     }
 
+    private void UpdateSessionReservations()
+    {
+        _sessions = _sessionData.Where(e => e.TimeSlot.StartTime +e.TimeSlot.Duration >= DateTime.Now).Select(e =>
+        {
+            var reservationsForSession = GetReservationsForSession(_reservations, e.ToSession()).ToList();
+            var isBooked = _ownReservations.Any(o => o.StartTime == e.TimeSlot.StartTime && o.TeamId == e.team.Id);
+
+
+            var res = new SessionUiItem
+            {
+                Available = e.SizeLimit - reservationsForSession.Count(),
+                StartTime = e.TimeSlot.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture),
+                BookingStateToggleText = isBooked ? SessionUiItem.BookingStateOnText : SessionUiItem.BookingStateOffText,
+                Reservations = reservationsForSession,
+                Size = e.SizeLimit,
+                Generator = e,
+                TeamName = e.team.Name
+            };
+            if (!isBooked && e.team.Limits.TryGetValue(TeamLimit.ActiveBookings, out var maxActiveBookings))
+            {
+                res.Disabled = _ownReservations.Count(reservation => reservation.StartTime > DateTime.Now && reservation.TeamId == e.team.Id) >= maxActiveBookings;
+            }
+            
+            res.ToggleBookingState = async () =>
+            {
+                foreach (var sessionUiItem in _sessions)
+                {
+                    sessionUiItem.Disabled = true;
+                }
+                await Book(e.ToSession());
+            };
+            if (isBooked)
+                res.ToggleBookingState = async () =>
+                {
+                    foreach (var sessionUiItem in _sessions)
+                    {
+                        sessionUiItem.Disabled = true;
+                    }
+                    await CancelBooking(e.ToSession());
+                };
+
+            return res;
+        }).ToList();
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         _selectedSession = null;
@@ -130,36 +176,9 @@ else
         _nextDayUrl = sessionNavigator.GetNextSessionDayUrl(Date);
         _previousDayUrl = sessionNavigator.GetPreviousSessionDayUrl(Date);
 
+        _sessionData = sessionResolver.ResolveSessions(sessionsForDate).ToList();
         _reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
-        var sessionData = sessionResolver.ResolveSessions(sessionsForDate);
-
-        _sessions = sessionData.Where(e => e.TimeSlot.StartTime +e.TimeSlot.Duration >= DateTime.Now).Select(e =>
-        {
-            var reservationsForSession = GetReservations(e.ToSession()).ToList();
-            var isBooked = _ownReservations.Any(o => o.StartTime == e.TimeSlot.StartTime && o.TeamId == e.team.Id);
-
-            BookingStateToggler toggleState = async () => await Book(e.ToSession());
-            if (isBooked)
-                toggleState = async () => await CancelBooking(e.ToSession());
-
-            var res = new SessionUiItem
-            {
-                Available = e.SizeLimit - reservationsForSession.Count(),
-                StartTime = e.TimeSlot.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture),
-                BookingStateToggleText = isBooked ? SessionUiItem.BookingStateOnText : SessionUiItem.BookingStateOffText,
-                ToggleBookingState = toggleState,
-                Reservations = reservationsForSession,
-                Size = e.SizeLimit,
-                Generator = e,
-                TeamName = e.team.Name
-            };
-            if (!isBooked && e.team.Limits.TryGetValue(TeamLimit.ActiveBookings, out var maxActiveBookings))
-            {
-                res.Disabled = _ownReservations.Count(reservation => reservation.StartTime > DateTime.Now && reservation.TeamId == e.team.Id) >= maxActiveBookings;
-            }
-
-            return res;
-        });
+        UpdateSessionReservations();
     }
 
 
@@ -170,9 +189,9 @@ else
     }
 
 
-    private IEnumerable<string> GetReservations(TeamSession session)
+    private IEnumerable<string> GetReservationsForSession(List<BookedTimeSlot> reservations, TeamSession session)
     {
-        var res = _reservations.Where(reservation => reservation.StartTime == session.StartTime).ToList();
+        var res = reservations.Where(reservation => reservation.StartTime == session.StartTime).ToList();
         if (!res.Any()) return Enumerable.Empty<string>();
         var teamReservations = res.Select(e => e.TeamReservations).Single();
         if (teamReservations.TryGetValue(session.TeamId, out var reservationsForTeam))
@@ -186,17 +205,20 @@ else
     {
         await BookingService.MakeTeamReservation(sessionToBook);
         _ownReservations.Add(new UserReservation { StartTime = sessionToBook.StartTime, TeamId = sessionToBook.TeamId });
+        UpdateSessionReservations();
     }
 
     private async Task CancelBooking(TeamSession sessionToBook)
     {
         await BookingService.CancelTeamReservation(sessionToBook);
         _ownReservations.RemoveAll(e => e.StartTime == sessionToBook.StartTime && e.TeamId == sessionToBook.TeamId);
+        UpdateSessionReservations();
     }
 
     private async void BookingsChanged()
     {
         _reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
+        UpdateSessionReservations();
         await InvokeAsync(StateHasChanged);
     }
 

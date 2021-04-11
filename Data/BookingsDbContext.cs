@@ -13,16 +13,20 @@ namespace BookingApp.Data
         {
             
         }
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<UserReservationEntity>()
+                .HasKey(c => new { c.UserId, c.StartTime, c.TeamId });
+        }
+        
     }
 
+    [Index(nameof(UserId), nameof(StartTime),nameof(TeamId), IsUnique = true)]
     public class UserReservationEntity
     {
-        [Key]
-        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        public int Id { get; set; }
-        public string UserId { get; set; }
-        public DateTime StartTime { get; set; }
-        public string TeamId { get; set; }
-        public DateTime EndTime { get; set; }
+        public string UserId { get; init; }
+        public DateTime StartTime { get; init; }
+        public string TeamId { get; init; }
+        public DateTime EndTime { get; init; }
     }
 }
