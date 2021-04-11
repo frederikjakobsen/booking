@@ -37,9 +37,9 @@ namespace BookingApp
                     ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
             });
             services.AddDbContext<ApplicationDbContext>(options =>
-                options.UseSqlite ("DataSource=app.db"));
+                options.UseSqlite ("DataSource=db/app.db"));
             services.AddDbContext<BookingsDbContext>(options =>
-                options.UseSqlite ("DataSource=bookings.db"));
+                options.UseSqlite ("DataSource=db/bookings.db"));
 
             services.AddDefaultIdentity<ApplicationUser>()
                 .AddRoles<IdentityRole>()
