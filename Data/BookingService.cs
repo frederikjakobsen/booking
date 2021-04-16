@@ -152,11 +152,11 @@ namespace BookingApp.Data
 
     public class Team
     {
-        public string Id { get; set; }
-        public string Name { get; set; }
-        public TimeSpan Duration { get; set; }
+        public string Id { get; init; }
+        public string Name { get; init; }
+        public TimeSpan Duration { get; init; }
 
-        public Dictionary<TeamLimit, int> Limits = new Dictionary<TeamLimit, int>();
+        public Dictionary<TeamLimit, int> Limits = new();
     }
 
     public enum TeamLimit

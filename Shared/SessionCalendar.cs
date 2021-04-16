@@ -8,13 +8,13 @@ namespace BookingApp.Shared
 {
     public class SessionNavigator
     {
-        private readonly ISessionCalendar sessionCalendar;
+        private readonly ISessionCalendar _sessionCalendar;
         private readonly string _path;
 
         public SessionNavigator(ISessionCalendar sessionCalendar, string path)
         {
-            this.sessionCalendar = sessionCalendar;
-            this._path = path;
+            _sessionCalendar = sessionCalendar;
+            _path = path;
         }
 
         private string UrlForDate(DateTime date)
@@ -24,12 +24,12 @@ namespace BookingApp.Shared
 
         public string GetNextSessionDayUrl(DateTime date)
         {
-            return  UrlForDate(sessionCalendar.NextDayWithSessions(date));
+            return  UrlForDate(_sessionCalendar.NextDayWithSessions(date));
         }
 
         public string GetPreviousSessionDayUrl(DateTime date)
         {
-            var previousDayWithSessions = sessionCalendar.PreviousDayWithSessions(date);
+            var previousDayWithSessions = _sessionCalendar.PreviousDayWithSessions(date);
             if (previousDayWithSessions < DateTime.Today)
                 return null;
             return UrlForDate(previousDayWithSessions);
@@ -54,12 +54,12 @@ namespace BookingApp.Shared
     public class SessionResolver
     {
         private readonly SpaceSchedule _spaceSchedule;
-        private readonly TeamService teamService;
+        private readonly TeamService _teamService;
 
-        public SessionResolver(ScheduleService scheduleService, TeamService teamService)
+        public SessionResolver(SpaceSchedule spaceSchedule, TeamService teamService)
         {
-            _spaceSchedule = new SpaceSchedule(scheduleService,teamService);
-            this.teamService = teamService;
+            _spaceSchedule = spaceSchedule;
+            _teamService = teamService;
         }
         
         private int GetSizeLimit(Team team, TimeSlot startTime)
@@ -75,7 +75,7 @@ namespace BookingApp.Shared
         {
             return sessions.Select(e =>
             {
-                 var team = teamService.GetTeam(e.TeamId);
+                 var team = _teamService.GetTeam(e.TeamId);
                  var slot = new TimeSlot {StartTime = e.StartTime, Duration = team.Duration};
                  return new ResolvedTeamSession
                  {

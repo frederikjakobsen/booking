@@ -1,0 +1,50 @@
+﻿{
+   "schedule": 
+  [
+    {
+      "teamId": "wl-beginner",
+      "timeOfDay":  "16:30:00",
+      "day": "Monday"
+    },
+    {
+      "teamId": "wl-intermediate",
+      "timeOfDay":  "17:00:00",
+      "day": "Wednesday"
+    },
+    {
+      "teamId": "wl-advanced",
+      "timeOfDay":  "16:30:00",
+      "day": "Tuesday"
+    }
+  ],
+  "teams":
+  [
+    {
+      "id": "open",
+      "duration":  "0:30:00",
+      "name": "Open"
+    },
+    {
+      "id": "wl-beginner",
+      "duration":  "1:30:00",
+      "name": "Weightlifting Beginners",
+      "limits": {"Size":10, "ActiveBookings": 2}
+    },
+    {
+      "id": "wl-intermediate",
+      "duration":  "1:30:00",
+      "name": "Weightlifting Intermediate",
+      "limits": {"Size":10, "ActiveBookings": 2}
+    },
+    {
+      "id": "wl-advanced",
+      "duration":  "1:30:00",
+      "name": "Weightlifting Advanced",
+      "limits": {"Size":10, "ActiveBookings": 2}
+    }
+  ],
+  "space":
+  {
+    "size": 20
+  }
+}

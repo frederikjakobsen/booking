@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using BookingApp.Services;
+using Microsoft.Extensions.Options;
 
 namespace BookingApp.Data
 {
@@ -7,45 +9,38 @@ namespace BookingApp.Data
     {
         private readonly Dictionary<string, Team> teams = new Dictionary<string, Team>();
 
-        public static readonly Team Open = new Team
+        private void InitializeTeamsFromConfiguration(List<TeamOption> teamConfig)
         {
-            Duration = TimeSpan.FromHours(1),
-            Id = "open",
-            Name = "Open",
-            Limits = new Dictionary<TeamLimit, int>()
-        };
+            teamConfig.ForEach(e=>
+                teams.Add(e.Id, new()
+                {
+                    Duration = e.Duration,
+                    Id = e.Id,
+                    Name = e.Name,
+                    Limits = ParseLimits(e.Limits)
+                })
+                );
+        }
 
-        public TeamService()
+        private static Dictionary<TeamLimit, int> ParseLimits(Dictionary<string, int> limits)
         {
-            teams.Add("open", Open);
-            teams.Add("1", new Team
+            var res = new Dictionary<TeamLimit, int>();
+            if (limits == null)
+                return res;
+            
+            foreach (var keyValuePair in limits)
             {
-                Duration = TimeSpan.FromMinutes(90),
-                Id = "1",
-                Name = "Beginner",
-                Limits =
-                    new Dictionary<TeamLimit, int>
-                    {
-                        { TeamLimit.Size, 1},
-                        { TeamLimit.ActiveBookings, 2}
-                    }
-            });
-            teams.Add("2", new Team { Duration = TimeSpan.FromMinutes(90), Id = "2", Name = "Intermediate",
-                Limits =
-                    new Dictionary<TeamLimit, int>
-                    {
-                        { TeamLimit.Size, 2},
-                        { TeamLimit.ActiveBookings, 2}
-                    }
-            });
-            teams.Add("3", new Team { Duration = TimeSpan.FromMinutes(90), Id = "3", Name = "Elite",
-                Limits =
-                    new Dictionary<TeamLimit, int>
-                    {
-                        { TeamLimit.Size, 3},
-                        { TeamLimit.ActiveBookings, 2}
-                    }
-            });
+                if (Enum.TryParse(keyValuePair.Key, out TeamLimit limitType))
+                {
+                    res.Add(limitType, keyValuePair.Value);
+                }
+            }
+            return res;
+        }
+
+        public TeamService(IOptions<List<TeamOption>> options)
+        {
+            InitializeTeamsFromConfiguration(options.Value);
         }
 
         public Team GetTeam(string id)

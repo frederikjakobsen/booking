@@ -1,6 +1,6 @@
-﻿@inject BookingService BookingService
-@inject ScheduleService ScheduleService
-@inject TeamService TeamService
+﻿@inject BookingService _bookingService
+@inject SpaceSchedule _spaceSchedule
+@inject TeamService _teamService
 @attribute [Authorize]
 @implements IDisposable
 @using System.Globalization
@@ -108,7 +108,7 @@ else
 
     private static DateTime RoundToDays(DateTime date)
     {
-        return new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, date.Kind);
+        return new(date.Year, date.Month, date.Day, 0, 0, 0, date.Kind);
     }
 
     private DateTime SanitizeSessionDate(DateTime date)
@@ -168,7 +168,7 @@ else
     {
         _selectedSession = null;
         var sessionNavigator = new SessionNavigator(Calendar, SessionPath);
-        var sessionResolver = new SessionResolver(ScheduleService, TeamService);
+        var sessionResolver = new SessionResolver(_spaceSchedule, _teamService);
 
         var sessionsForDate =  Calendar.DailySessions(SanitizeSessionDate(Date)).ToList();
         Date = RoundToDays(sessionsForDate.First().StartTime);
@@ -177,14 +177,14 @@ else
         _previousDayUrl = sessionNavigator.GetPreviousSessionDayUrl(Date);
 
         _sessionData = sessionResolver.ResolveSessions(sessionsForDate).ToList();
-        _reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
+        _reservations = await _bookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
         UpdateSessionReservations();
     }
 
 
     protected override async Task OnInitializedAsync()
     {
-        _ownReservations = (await BookingService.GetLoggedOnUserReservations()).ToList();
+        _ownReservations = (await _bookingService.GetLoggedOnUserReservations()).ToList();
         BookingService.OnBookingsChanged += this.BookingsChanged;
     }
 
@@ -203,21 +203,21 @@ else
 
     private async Task Book(TeamSession sessionToBook)
     {
-        await BookingService.MakeTeamReservation(sessionToBook);
+        await _bookingService.MakeTeamReservation(sessionToBook);
         _ownReservations.Add(new UserReservation { StartTime = sessionToBook.StartTime, TeamId = sessionToBook.TeamId });
         UpdateSessionReservations();
     }
 
     private async Task CancelBooking(TeamSession sessionToBook)
     {
-        await BookingService.CancelTeamReservation(sessionToBook);
+        await _bookingService.CancelTeamReservation(sessionToBook);
         _ownReservations.RemoveAll(e => e.StartTime == sessionToBook.StartTime && e.TeamId == sessionToBook.TeamId);
         UpdateSessionReservations();
     }
 
     private async void BookingsChanged()
     {
-        _reservations = await BookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
+        _reservations = await _bookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
         UpdateSessionReservations();
         await InvokeAsync(StateHasChanged);
     }

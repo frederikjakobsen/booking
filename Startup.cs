@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -57,13 +55,18 @@ namespace BookingApp
             
             services.AddTransient<IEmailSender, EmailSender>();
             services.Configure<AuthMessageSenderOptions>(Configuration);
+            services.Configure<List<TeamOption>>(Configuration.GetSection("teams"));
+            services.Configure<List<WeeklyScheduledTeamOption>>(Configuration.GetSection("schedule"));
+            services.Configure<SpaceOptions>(Configuration.GetSection("space"));
+
 
             services.AddRazorPages();
             services.AddServerSideBlazor();
             services.AddScoped<AuthenticationStateProvider, RevalidatingIdentityAuthenticationStateProvider<ApplicationUser>>();
             services.AddScoped<BookingService>();
-            services.AddSingleton<TeamService>();
-            services.AddSingleton<ScheduleService>();
+            services.AddScoped<TeamService>();
+            services.AddScoped<ScheduleService>();
+            services.AddScoped<SpaceSchedule>();
             services.AddScoped<UserService>();
             services.AddScoped<IBookingStorage,EfBookingStorage>();
             services.AddScoped<UserManagerService>();

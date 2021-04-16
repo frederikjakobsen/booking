@@ -1,5 +1,6 @@
 ﻿@page "/opensessions/{Date:datetime}"
-@inject ScheduleService ScheduleService
+@inject ScheduleService _scheduleService
+@inject TeamService _teamService
 @attribute [Authorize]
 
 <SessionBooking Date="Date" Calendar="@_calendar" Title="Open session booking" SessionPath="opensessions"></SessionBooking>
@@ -14,7 +15,7 @@
 
     protected override Task OnInitializedAsync()
     {
-        _calendar = new OpenSessionCalendar(TeamService.Open);
+        _calendar = new OpenSessionCalendar(_teamService.GetTeam("open"));
         return Task.CompletedTask;
     }
 }

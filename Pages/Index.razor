@@ -1,22 +1,22 @@
 ﻿@page "/"
 @using System.Globalization
-@inject BookingService BookingService
-@inject TeamService TeamService
-@inject ScheduleService ScheduleService
+@inject BookingService _bookingService
+@inject TeamService _teamService
+@inject SpaceSchedule _spaceSchedule
 @attribute [Authorize]
 
 <p>
-    <a href="@openSessionLink">Book open session</a>
+    <a href="@_openSessionLink">Book open session</a>
 </p>
 <p>
-    <a href="@teamSessionLink">Book team session</a>
+    <a href="@_teamSessionLink">Book team session</a>
 </p>
 
-@if (reservationDetails.Any())
+@if (_reservationDetails.Any())
 {
 <h3>Active bookings</h3>
 <table>
-    @foreach (var reservation in reservationDetails)
+    @foreach (var reservation in _reservationDetails)
         {
     <tr>
         <td>
@@ -43,10 +43,8 @@ else
 
 @code
 {
-    private readonly string openSessionLink = $"/opensessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
-    private readonly string teamSessionLink = $"/teamsessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
-
-    private SpaceSchedule _spaceSchedule;
+    private readonly string _openSessionLink = $"/opensessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+    private readonly string _teamSessionLink = $"/teamsessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
 
     class OwnReservationUi
     {
@@ -57,7 +55,7 @@ else
         public UserReservation Generator { get; set; }
     }
 
-    private List<OwnReservationUi> reservationDetails = new List<OwnReservationUi>();
+    private readonly List<OwnReservationUi> _reservationDetails = new();
 
     private int GetTeamSize(Team team, DateTime startTime)
     {
@@ -71,16 +69,15 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        _spaceSchedule = new SpaceSchedule(ScheduleService, TeamService);
         
-        var userReservations = (await BookingService.GetLoggedOnUserReservations()).OrderBy(e => e.StartTime);
+        var userReservations = (await _bookingService.GetLoggedOnUserReservations()).OrderBy(e => e.StartTime);
         foreach (var userres in userReservations)
         {
             var team = GetTeamForReservation(userres);
             if (userres.StartTime + team.Duration < DateTime.Now)
                 continue;
 
-            var userPosition = await BookingService.GetLoggedOnUserPositionForReservedSession(userres);
+            var userPosition = await _bookingService.GetLoggedOnUserPositionForReservedSession(userres);
             var details = new OwnReservationUi();
             details.Generator = userres;
             details.QueueText = "";
@@ -93,20 +90,20 @@ else
                 var positionInQueue = userPosition - teamSize + 1;
                 details.QueueText = $"In queue ({positionInQueue})";
             }
-            reservationDetails.Add(details);
+            _reservationDetails.Add(details);
         }
     }
 
     private Team GetTeamForReservation(UserReservation userReservation)
     {
-        return TeamService.GetTeam(userReservation.TeamId);
+        return _teamService.GetTeam(userReservation.TeamId);
     }
 
     private async Task CancelBooking(OwnReservationUi reservation)
     {
-        await BookingService.CancelUserReservation(reservation.Generator);
+        await _bookingService.CancelUserReservation(reservation.Generator);
 
-        reservationDetails.Remove(reservation);
+        _reservationDetails.Remove(reservation);
     }
 
     private string CreateSessionBookingPageUrl(UserReservation reservation)
