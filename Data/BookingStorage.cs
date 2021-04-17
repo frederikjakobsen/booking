@@ -17,136 +17,38 @@ namespace BookingApp.Data
         Task AddReservation(string userId, UserReservation reservation);
         Task RemoveAllReservations(string userId);
     }
-
-    public class BookingStorage : IBookingStorage
-    {
-        private readonly ConcurrentDictionary<string, List<UserReservation>> userReservations = new ConcurrentDictionary<string, List<UserReservation>>();
-
-        private readonly ConcurrentDictionary<DateTime, Dictionary<string, List<string>>> bookingsWithReservations = new ConcurrentDictionary<DateTime, Dictionary<string, List<string>>>();
-
-        private readonly SemaphoreSlim reservationLock = new SemaphoreSlim(1);
-
-        public Task<List<UserReservation>> GetReservationsFor(string userId)
-        {
-            return Task.FromResult(userReservations.GetValueOrDefault(userId, new List<UserReservation>()));
-        }
-
-        public async Task<List<string>> GetReservationsForSession(string teamId, DateTime startTime)
-        {
-            await reservationLock.WaitAsync();
-            try
-            {
-                Dictionary<string, List<string>> reservations;
-                if (!bookingsWithReservations.TryGetValue(startTime, out reservations))
-                    return new List<string>();
-                return reservations.GetValueOrDefault(teamId, new List<string>());
-            }
-            finally
-            {
-                reservationLock.Release();
-            }
-        }
-
-        private bool IsTimeWithin(DateTime slot, DateTime from, TimeSpan duration)
-        {
-            return slot >= from && slot <= from + duration;
-        }
-
-        public async Task<List<BookedTimeSlot>> GetAllReservationsBetweenAsync(DateTime from, TimeSpan duration)
-        {
-            await reservationLock.WaitAsync();
-            try
-            {
-                return bookingsWithReservations.Where(bookedTimeSlot => IsTimeWithin(bookedTimeSlot.Key, from, duration))
-                    .Select(bookedTimeSlot => new BookedTimeSlot { TeamReservations = bookedTimeSlot.Value, StartTime = bookedTimeSlot.Key })
-                    .ToList();
-            }
-            finally
-            {
-                reservationLock.Release();
-            }
-        }
-
-        public async Task RemoveReservation(string userId, UserReservation reservation)
-        {
-            await reservationLock.WaitAsync();
-            try
-            {
-                var reservationsForUser = userReservations.GetValueOrDefault(userId, new List<UserReservation>());
-                if (reservationsForUser.Remove(reservation))
-                {
-                    var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime,
-                        new Dictionary<string, List<string>>()
-                    );
-                    var reservationsForTeam = currentBookingsAtSameTime.GetValueOrDefault(reservation.TeamId, new List<string>());
-                    reservationsForTeam.Remove(userId);
-                }
-            }
-            finally
-            {
-                reservationLock.Release();
-            }
-        }
-
-        public async Task AddReservation(string userId, UserReservation reservation)
-        {
-            await reservationLock.WaitAsync();
-            try
-            {
-                var reservationsForUser = userReservations.GetValueOrDefault(userId, new List<UserReservation>());
-                reservationsForUser.Add(reservation);
-                userReservations[userId] = reservationsForUser;
-
-                var currentBookingsAtSameTime = bookingsWithReservations.GetValueOrDefault(reservation.StartTime,
-                    new Dictionary<string, List<string>>()
-                );
-                var teamReservations = currentBookingsAtSameTime.GetValueOrDefault(reservation.TeamId, new List<string>());
-                teamReservations.Add(userId);
-                currentBookingsAtSameTime[reservation.TeamId] = teamReservations;
-                bookingsWithReservations[reservation.StartTime] = currentBookingsAtSameTime;
-            }
-            finally
-            {
-                reservationLock.Release();
-            }
-        }
-
-        public Task RemoveAllReservations(string userId)
-        {
-            throw new NotImplementedException();
-        }
-    }
-    
     
     public class EfBookingStorage :IBookingStorage
     {
         private readonly TeamService _teamService;
-        private readonly BookingsDbContext db;
+        private readonly BookingsDbContext _db;
+        private readonly DbContextOptions<BookingsDbContext> _dbContextOptions;
 
-        public EfBookingStorage(TeamService teamService, BookingsDbContext dbContext)
+        public EfBookingStorage(TeamService teamService, BookingsDbContext dbContext, DbContextOptions<BookingsDbContext> dbContextOptions)
         {
             _teamService = teamService;
-            db = dbContext;
+            _db = dbContext;
+            _dbContextOptions = dbContextOptions;
         }
         
         public async Task<List<UserReservation>> GetReservationsFor(string userId)
         {
-            return await db.UserReservations.Where(e => e.UserId == userId).Select(e=>new UserReservation
+            return await _db.UserReservations.Where(e => e.UserId == userId).Select(e=>new UserReservation
             {
                 StartTime = e.StartTime,
                 TeamId = e.TeamId
-            }).ToListAsync();
+            }).AsNoTracking().ToListAsync();
         }
 
         public async Task<List<string>> GetReservationsForSession(string teamId, DateTime startTime)
         {
-            return await db.UserReservations.Where(e => e.TeamId == teamId && e.StartTime == startTime).Select(e => e.UserId).ToListAsync();
+            return await _db.UserReservations.Where(e => e.TeamId == teamId && e.StartTime == startTime).Select(e => e.UserId).AsNoTracking().ToListAsync();
         }
 
         public async Task<List<BookedTimeSlot>> GetAllReservationsBetweenAsync(DateTime from, TimeSpan duration)
         {
             var endTime = from + duration;
-            var allReservationsBetween = await db.UserReservations.Where(e => (e.StartTime < endTime) && (e.EndTime > from)).ToListAsync();
+            var allReservationsBetween = await _db.UserReservations.Where(e => (e.StartTime < endTime) && (e.EndTime > from)).AsNoTracking().ToListAsync();
             
             // convert to booked time slots (client side)
             return allReservationsBetween.GroupBy(e =>
@@ -166,16 +68,18 @@ namespace BookingApp.Data
 
         public async Task RemoveReservation(string userId, UserReservation reservation)
         {
-            var itemToRemove = await db.UserReservations.FirstOrDefaultAsync(res =>
+            await using var dbCtx = new BookingsDbContext(_dbContextOptions);
+            var itemToRemove = await dbCtx.UserReservations.FirstOrDefaultAsync(res =>
                 res.UserId == userId && res.TeamId == reservation.TeamId && res.StartTime == reservation.StartTime);
             if (itemToRemove == null)
                 return;
-            db.Remove(itemToRemove);
-            await db.SaveChangesAsync();
+            dbCtx.UserReservations.Remove(itemToRemove);
+            await dbCtx.SaveChangesAsync();
         }
 
         public async Task AddReservation(string userId, UserReservation reservation)
         {
+            await using var dbCtx = new BookingsDbContext(_dbContextOptions);
             var reservationEntity = new UserReservationEntity
             {
                 StartTime = reservation.StartTime, 
@@ -183,15 +87,16 @@ namespace BookingApp.Data
                 UserId = userId,
                 EndTime = reservation.StartTime+_teamService.GetTeam(reservation.TeamId).Duration
             };
-            db.Add(reservationEntity);
-            await db.SaveChangesAsync();
+            dbCtx.UserReservations.Add(reservationEntity);
+            await dbCtx.SaveChangesAsync();
         }
 
         public async Task RemoveAllReservations(string userId)
         {
-            var allReservations= db.UserReservations.Where(e => e.UserId == userId);
-            db.UserReservations.RemoveRange(allReservations);
-            await db.SaveChangesAsync();
+            await using var dbCtx = new BookingsDbContext(_dbContextOptions);
+            var allReservations= _db.UserReservations.Where(e => e.UserId == userId);
+            dbCtx.UserReservations.RemoveRange(allReservations);
+            await dbCtx.SaveChangesAsync();
         }
     }
     

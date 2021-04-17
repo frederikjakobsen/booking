@@ -62,7 +62,7 @@ else
 
     private string _nextDayUrl = null;
     private string _previousDayUrl = null;
-    private List<UserReservation> _ownReservations = new List<UserReservation>();
+    private List<UserReservation> _ownReservations = new();
 
     [Parameter]
     public DateTime Date { get; set; }
@@ -178,14 +178,15 @@ else
 
         _sessionData = sessionResolver.ResolveSessions(sessionsForDate).ToList();
         _reservations = await _bookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
+        _ownReservations = await _bookingService.GetLoggedOnUserReservationsFrom(_reservations);
         UpdateSessionReservations();
     }
 
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync()
     {
-        _ownReservations = (await _bookingService.GetLoggedOnUserReservations()).ToList();
-        BookingService.OnBookingsChanged += this.BookingsChanged;
+        BookingService.OnBookingsChanged += BookingsChanged;
+        return Task.CompletedTask;
     }
 
 
@@ -204,27 +205,24 @@ else
     private async Task Book(TeamSession sessionToBook)
     {
         await _bookingService.MakeTeamReservation(sessionToBook);
-        _ownReservations.Add(new UserReservation { StartTime = sessionToBook.StartTime, TeamId = sessionToBook.TeamId });
-        UpdateSessionReservations();
     }
 
     private async Task CancelBooking(TeamSession sessionToBook)
     {
         await _bookingService.CancelTeamReservation(sessionToBook);
-        _ownReservations.RemoveAll(e => e.StartTime == sessionToBook.StartTime && e.TeamId == sessionToBook.TeamId);
-        UpdateSessionReservations();
     }
 
     private async void BookingsChanged()
     {
         _reservations = await _bookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
+        _ownReservations = (await _bookingService.GetLoggedOnUserReservationsFrom(_reservations)).ToList();
         UpdateSessionReservations();
         await InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
     {
-        BookingService.OnBookingsChanged -= this.BookingsChanged;
+        BookingService.OnBookingsChanged -= BookingsChanged;
     }
 
 }

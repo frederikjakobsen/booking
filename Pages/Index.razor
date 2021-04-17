@@ -43,24 +43,23 @@ else
 
 @code
 {
-    private readonly string _openSessionLink = $"/opensessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
-    private readonly string _teamSessionLink = $"/teamsessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+    private readonly string _openSessionLink = CreatePathWithDate("opensessions", DateTime.Today);
+    private readonly string _teamSessionLink =  CreatePathWithDate("teamsessions", DateTime.Today);
 
     class OwnReservationUi
     {
-        public string Team { get; set; }
+        public string Team { get; init; }
         public string QueueText { get; set; }
-        public string SessionBookingPageUrl { get; set; }
-        public string StartTime { get; set; }
-        public UserReservation Generator { get; set; }
+        public string SessionBookingPageUrl { get; init; }
+        public string StartTime { get; init; }
+        public UserReservation Generator { get; init; }
     }
 
     private readonly List<OwnReservationUi> _reservationDetails = new();
 
     private int GetTeamSize(Team team, DateTime startTime)
     {
-        int sizeLimit = 0;
-        if (team.Limits.TryGetValue(TeamLimit.Size, out sizeLimit))
+        if (team.Limits.TryGetValue(TeamLimit.Size, out var sizeLimit))
         {
             return sizeLimit;
         }
@@ -78,12 +77,14 @@ else
                 continue;
 
             var userPosition = await _bookingService.GetLoggedOnUserPositionForReservedSession(userres);
-            var details = new OwnReservationUi();
-            details.Generator = userres;
-            details.QueueText = "";
-            details.SessionBookingPageUrl = CreateSessionBookingPageUrl(userres);
-            details.StartTime = userres.StartTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-            details.Team = team.Name;
+            var details = new OwnReservationUi
+            {
+                Generator = userres,
+                QueueText = "",
+                SessionBookingPageUrl = CreateSessionBookingPageUrl(userres),
+                StartTime = userres.StartTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
+                Team = team.Name
+            };
             var teamSize = GetTeamSize(team, userres.StartTime);
             if (userPosition >= teamSize)
             {
@@ -106,11 +107,16 @@ else
         _reservationDetails.Remove(reservation);
     }
 
+    private static string CreatePathWithDate(string path, DateTime date)
+    {
+        return $"/{path}/{date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+    }
+
     private string CreateSessionBookingPageUrl(UserReservation reservation)
     {
         if (reservation.TeamId == "open")
-            return $"/opensessions/{reservation.StartTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
-        return $"/teamsessions/{reservation.StartTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+            return CreatePathWithDate("opensessions", reservation.StartTime);
+        return CreatePathWithDate("teamsessions", reservation.StartTime);
 
     }
 }
