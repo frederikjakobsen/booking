@@ -92,7 +92,7 @@ else
     {
         public int Available { get; set; }
         public int Size { get; set; }
-        public bool Disabled {get;set;} = false;
+        public bool Disabled { get; set; }
         public IEnumerable<string> Reservations;
         public string StartTime { get; set; }
         public string TeamName;
@@ -100,7 +100,6 @@ else
         public string BookingStateToggleText { get; set; }
         public const string BookingStateOnText = "Cancel booking";
         public const string BookingStateOffText = "Book";
-        public Object Generator;
 
         public bool Equals(SessionUiItem session)
         {
@@ -137,7 +136,6 @@ else
                 BookingStateToggleText = isBooked ? SessionUiItem.BookingStateOnText : SessionUiItem.BookingStateOffText,
                 Reservations = reservationsForSession,
                 Size = e.SizeLimit,
-                Generator = e,
                 TeamName = e.team.Name
             };
             if (!isBooked && e.team.Limits.TryGetValue(TeamLimit.ActiveBookings, out var maxActiveBookings))
@@ -148,7 +146,6 @@ else
             res.ToggleBookingState = async () =>
             {
                 await Book(e.ToSession());
-                
             };
             if (isBooked)
                 res.ToggleBookingState = async () =>
@@ -174,7 +171,7 @@ else
 
         _sessionData = sessionResolver.ResolveSessions(sessionsForDate).ToList();
         _reservations = await _bookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
-        _ownReservations = await _bookingService.GetLoggedOnUserReservationsFrom(_reservations);
+        _ownReservations = await _bookingService.GetLoggedOnUserReservations();
         UpdateSessionReservations();
     }
 
@@ -229,7 +226,7 @@ else
     private async void BookingsChanged()
     {
         _reservations = await _bookingService.GetAllReservations(Date, TimeSpan.FromDays(1));
-        _ownReservations = (await _bookingService.GetLoggedOnUserReservationsFrom(_reservations)).ToList();
+        _ownReservations = await _bookingService.GetLoggedOnUserReservations();
         UpdateSessionReservations();
         await InvokeAsync(StateHasChanged);
     }
