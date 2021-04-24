@@ -139,19 +139,6 @@ namespace BookingApp.Data
             return await _bookingStorage.GetReservationsFor(userId);
         }
 
-        public async Task<List<UserReservation>> GetLoggedOnUserReservationsFrom(IEnumerable<BookedTimeSlot> reservations)
-        {
-            var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
-            var userId = (await _userManager.GetUserAsync(state.User)).Id;
-            return reservations.Where(e => e.TeamReservations.Values.Any(z => z.Contains(userId))).Select(e =>
-                new UserReservation
-                {
-                    StartTime = e.StartTime,
-                    TeamId = e.TeamReservations.Where(z=>z.Value.Contains(userId)).Select(z=>z.Key).Single()
-                }
-            ).ToList();
-        }
-
         public async Task<List<BookedTimeSlot>> GetAllReservations(DateTime from, TimeSpan duration)
         {
             return await _bookingStorage.GetAllReservationsBetweenAsync(from, duration);
