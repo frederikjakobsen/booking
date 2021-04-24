@@ -4,6 +4,8 @@
 @attribute [Authorize]
 @implements IDisposable
 @using System.Globalization
+@using System.Threading
+@using System.Collections.Concurrent
 
 <h2>@Title</h2>
 
@@ -67,12 +69,13 @@ else
     [Parameter]
     public DateTime Date { get; set; }
 
-
     private IEnumerable<SessionUiItem> _sessions = null;
 
     private SessionUiItem _selectedSession = null;
     private IEnumerable<ResolvedTeamSession> _sessionData;
     private List<BookedTimeSlot> _reservations;
+    
+    private SemaphoreSlim _processingLock = new(1,1);
 
     private void ToggleReservationsViewFor(SessionUiItem item)
     {
@@ -144,19 +147,12 @@ else
             
             res.ToggleBookingState = async () =>
             {
-                foreach (var sessionUiItem in _sessions)
-                {
-                    sessionUiItem.Disabled = true;
-                }
                 await Book(e.ToSession());
+                
             };
             if (isBooked)
                 res.ToggleBookingState = async () =>
                 {
-                    foreach (var sessionUiItem in _sessions)
-                    {
-                        sessionUiItem.Disabled = true;
-                    }
                     await CancelBooking(e.ToSession());
                 };
 
@@ -204,12 +200,30 @@ else
 
     private async Task Book(TeamSession sessionToBook)
     {
-        await _bookingService.MakeTeamReservation(sessionToBook);
+        await _processingLock.WaitAsync();
+        try
+        {
+            if (!_ownReservations.Any(o => o.StartTime == sessionToBook.StartTime && o.TeamId == sessionToBook.TeamId))
+                await _bookingService.MakeTeamReservation(sessionToBook);
+        }
+        finally
+        {
+            _processingLock.Release();
+        }
     }
 
     private async Task CancelBooking(TeamSession sessionToBook)
     {
-        await _bookingService.CancelTeamReservation(sessionToBook);
+        await _processingLock.WaitAsync();
+        try
+        {
+            if (_ownReservations.Any(o => o.StartTime == sessionToBook.StartTime && o.TeamId == sessionToBook.TeamId))
+                await _bookingService.CancelTeamReservation(sessionToBook);
+        }
+        finally
+        {
+            _processingLock.Release();
+        }
     }
 
     private async void BookingsChanged()
