@@ -1,15 +1,11 @@
 ﻿@inherits LayoutComponentBase
 @inject NavigationManager _navigationManager
 
-<div class="sidebar">
+<div class="sidebar bg-dark">
     <NavMenu />
 </div>
 
 <div class="main">
-    <div class="top-row px-4 auth">
-        <LoginDisplay />
-    </div>
-
     <div class="content px-4">
         @Body
     </div>
