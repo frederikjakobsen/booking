@@ -42,7 +42,8 @@ namespace BookingApp.Data
 
         public async Task<List<string>> GetReservationsForSession(string teamId, DateTime startTime)
         {
-            return await _db.UserReservations.Where(e => e.TeamId == teamId && e.StartTime == startTime).Select(e => e.UserId).AsNoTracking().ToListAsync();
+            var res= (await _db.UserReservations.Where(e => e.TeamId == teamId && e.StartTime == startTime).AsNoTracking().ToListAsync());
+            return res.Select(e => e.UserId).ToList();
         }
 
         public async Task<List<BookedTimeSlot>> GetAllReservationsBetweenAsync(DateTime from, TimeSpan duration)
@@ -52,17 +53,11 @@ namespace BookingApp.Data
             
             // convert to booked time slots (client side)
             return allReservationsBetween.GroupBy(e =>
-                new {e.StartTime, e.TeamId}
+                new {e.StartTime}
             ).Select(e => new BookedTimeSlot()
             {
                 StartTime = e.Key.StartTime,
-                TeamReservations = new Dictionary<string, List<string>>()
-                {
-                    {
-                        e.Key.TeamId,
-                        e.Select(u => u.UserId).ToList()
-                    }
-                }
+                TeamReservations = e.GroupBy(u=>u.TeamId).ToDictionary(y=>y.Key, y=>y.Select(z=>z.UserId).ToList())
             }).ToList();
         }
 
