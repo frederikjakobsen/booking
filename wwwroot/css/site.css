@@ -12,6 +12,11 @@ a, .btn-link {
     border-color: #1861ac;
 }
 
+.btn-timeslotinfo {
+    border-width: 0px;
+    border-radius: 3px 3px 3px 3px;
+}
+
 app {
     position: relative;
     display: flex;

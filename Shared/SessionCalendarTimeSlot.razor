@@ -10,7 +10,7 @@
     </div>
     @if (_showInfoBtn)
     {
-        <button class="alert border-0 my-0 h5 @_reservationStateStyle.ToggleButtonCustomization" @onclick="() => Session.ToggleReservationsView()"></button>
+        <button class="alert border-0 my-0 px-4 py-2 h5 @_reservationStateStyle.ToggleButtonCustomization" @onclick="() => Session.ToggleReservationsView()"></button>
     }
 </div>
 
@@ -56,12 +56,15 @@
             switch (userState)
             {
                 case ReservationStateSimplifier.UserSessionReservationState.Joined:
-                    containerStyle = "border-success";
+                    containerStyle = "alert-success border-success";
                     buttonStyle += " alert-success";
                     break;
                 case ReservationStateSimplifier.UserSessionReservationState.InQueue:
-                    containerStyle = "border-warning";
+                    containerStyle = "alert-warning border-warning";
                     buttonStyle += " alert-warning";
+                    break;
+                case ReservationStateSimplifier.UserSessionReservationState.None:
+                    buttonStyle += " alert-light";
                     break;
             }
 

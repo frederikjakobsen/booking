@@ -25,7 +25,7 @@
             }
         </div>
     </div>
-    <button class="alert my-0 h5 @_reservationStateStyle.ToggleButtonCustomization" @onclick="() => Session.ToggleReservationsView()"></button>
+    <button class="alert my-1 mx-1 h5 btn-timeslotinfo @_reservationStateStyle.ToggleButtonCustomization" @onclick="() => Session.ToggleReservationsView()"></button>
 </div>  
 
 @code {
@@ -66,6 +66,9 @@
                 case ReservationStateSimplifier.UserSessionReservationState.InQueue:
                     containerStyle = "border-warning";
                     buttonStyle += " alert-warning";
+                    break;
+                    case ReservationStateSimplifier.UserSessionReservationState.None:
+                    buttonStyle += " alert-light";
                     break;
             }
             return new()
