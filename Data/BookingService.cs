@@ -127,16 +127,12 @@ namespace BookingApp.Data
         public async Task<int> GetLoggedOnUserPositionForReservedSession(UserReservation userReservation)
         {
             var allReservations= await _bookingStorage.GetReservationsForSession(userReservation.TeamId, userReservation.StartTime);
-            var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
-            var userId = (await _userManager.GetUserAsync(state.User)).Id;
-            return allReservations.IndexOf(userId);
+            return allReservations.IndexOf(await GetLoggedOnUserId());
         }
 
         public async Task<List<UserReservation>> GetLoggedOnUserReservations()
         {
-            var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
-            var userId = (await _userManager.GetUserAsync(state.User)).Id;
-            return await _bookingStorage.GetReservationsFor(userId);
+            return await _bookingStorage.GetReservationsFor(await GetLoggedOnUserId());
         }
 
         public async Task<List<BookedTimeSlot>> GetAllReservations(DateTime from, TimeSpan duration)
@@ -147,6 +143,12 @@ namespace BookingApp.Data
         public delegate void BookingsChangedDelegate();
 
         public static event BookingsChangedDelegate OnBookingsChanged = delegate { };
+
+        public async Task<string> GetLoggedOnUserId()
+        {
+            var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
+            return (await _userManager.GetUserAsync(state.User)).Id;
+        }
     }
 
 

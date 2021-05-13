@@ -1,20 +1,38 @@
-﻿@page "/teamsessions/{Date:datetime}"
+﻿@page "/teamsessions/{DateInput:datetime?}"
 @inject ScheduleService ScheduleService
 @attribute [Authorize]
 
-<SessionBooking Date="Date" Calendar="@_calendar" Title="Team session booking" SessionPath="teamsessions"></SessionBooking>
-
+<CascadingValue Value="true">
+<SessionCalendarNavigator Date="@_date" UrlFactory="@_urlFactory" SessionCalendar="@_calendar"></SessionCalendarNavigator>
+<SessionBooking Date="@_date" Calendar="@_calendar" Title="Team session booking" SessionPath="teamsessions"></SessionBooking>
+</CascadingValue>
 
 @code {
 
     private ISessionCalendar _calendar;
-    
+
     [Parameter]
-    public DateTime Date { get; set; }
+    public DateTime? DateInput { get; set; }
+
+    private DateTime _date;
 
     protected override Task OnInitializedAsync()
     {
         _calendar = new TeamSessionCalendar(ScheduleService);
         return Task.CompletedTask;
     }
+    
+    protected override Task OnParametersSetAsync()
+    {
+        if (DateInput == null)
+            _date = DateTime.Now;
+        else
+        {
+            _date = DateInput.Value;
+        }
+        return Task.CompletedTask;
+    }
+    
+    private readonly SessionCalendarNavigator.SessionUrlFactory _urlFactory = new("teamsessions");
+
 }

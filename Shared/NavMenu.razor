@@ -1,5 +1,12 @@
 ﻿@using BookingApp.Areas.Identity
 @using System.Globalization
+<style>
+    .nav-link span {
+        font-size:  1.5rem;
+        margin-right:.5rem!important
+    }
+</style>
+
 <div class="top-row pl-4 navbar navbar-dark bg-dark">
     <a class="navbar-brand" href="">Booking</a>
     <button class="navbar-toggler" @onclick="ToggleNavMenu">
@@ -11,18 +18,18 @@
     <ul class="nav flex-column">
         <li class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="oi oi-home" aria-hidden="true"></span> Home
+                <span class="bi bi-bookmarks-fill" aria-hidden="true"></span> My bookings
             </NavLink>
         </li>
         <li class="nav-item px-3">
-            <NavLink class="nav-link" href="@openSessionLink">
-                <span class="oi oi-plus" aria-hidden="true"></span> Open
+            <NavLink class="nav-link" href="/opensessions">
+                <span class="bi bi-person" aria-hidden="true"> </span> Open
             </NavLink>
         </li>
 
         <li class="nav-item px-3">
-            <NavLink class="nav-link" href="@teamSessionLink">
-                <span class="oi oi-plus" aria-hidden="true"></span> Team
+            <NavLink class="nav-link" href="/teamsessions">
+                <span class="bi bi-people" aria-hidden="true"></span> Team
             </NavLink>
         </li>
         
@@ -30,7 +37,7 @@
             <Authorized>
                 <li class="nav-item px-3">
                     <NavLink class="nav-link" href="usermanager">
-                        <span class="oi oi-list-rich" aria-hidden="true"></span> User Manager
+                        <span class="bi bi-person-lines-fill" aria-hidden="true"></span> User Manager
                     </NavLink>
                 </li>
             </Authorized>
@@ -39,7 +46,7 @@
             <Authorized>
                 <li class="nav-item px-3">
                     <NavLink class="nav-link" href="Identity/Account/Manage">
-                        <span class="oi oi-person" aria-hidden="true"></span> Account
+                        <span class="bi bi-person-circle" aria-hidden="true"></span> Account
                     </NavLink>
                 </li>
             </Authorized>
@@ -58,8 +65,6 @@
         collapseNavMenu = !collapseNavMenu;
     }
 
-    private readonly string openSessionLink = $"/opensessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
-    private readonly string teamSessionLink = $"/teamsessions/{DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
 }
 
 

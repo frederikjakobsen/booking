@@ -15,26 +15,26 @@
 @if (_reservationDetails.Any())
 {
 <h3>Active bookings</h3>
-<table>
-    @foreach (var reservation in _reservationDetails)
+    <table>
+        @foreach (var reservation in _reservationDetails)
         {
-    <tr>
-        <td>
-            <a href=@reservation.SessionBookingPageUrl>@reservation.StartTime</a>
-        </td>
-        <td>
-            @reservation.Team
-        </td>
-        <td>
-            @reservation.QueueText
-        </td>
-        <td>
-            <button @onclick="()=>CancelBooking(reservation)">Cancel booking</button>
-        </td>
-    </tr>
-    }
+            <tr>
+                <td>
+                    <a href=@reservation.SessionBookingPageUrl>@reservation.StartTime</a>
+                </td>
+                <td>
+                    @reservation.Team
+                </td>
+                <td>
+                    @reservation.QueueText
+                </td>
+                <td>
+                    <button @onclick="()=>CancelBooking(reservation)">Cancel booking</button>
+                </td>
+            </tr>
+        }
 
-</table>
+    </table>
 }
 else
 {

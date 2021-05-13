@@ -1,21 +1,36 @@
-﻿@page "/opensessions/{Date:datetime}"
+﻿@page "/opensessions/{DateInput:datetime?}"
 @inject ScheduleService _scheduleService
 @inject TeamService _teamService
 @attribute [Authorize]
 
-<SessionBooking Date="Date" Calendar="@_calendar" Title="Open session booking" SessionPath="opensessions"></SessionBooking>
-
+<SessionCalendarNavigator Date="@_date" UrlFactory="@_urlFactory" SessionCalendar="@_calendar"></SessionCalendarNavigator>
+<SessionBooking Date="@_date" Calendar="@_calendar" Title="Open session booking" SessionPath="opensessions"></SessionBooking>
 
 @code {
 
     private ISessionCalendar _calendar;
     
     [Parameter]
-    public DateTime Date { get; set; }
+    public DateTime? DateInput { get; set; }
+
+    private DateTime _date;
 
     protected override Task OnInitializedAsync()
     {
         _calendar = new OpenSessionCalendar(_teamService.GetTeam("open"));
         return Task.CompletedTask;
     }
+
+    protected override Task OnParametersSetAsync()
+    {
+        if (DateInput == null)
+            _date = DateTime.Now;
+        else
+        {
+            _date = DateInput.Value;
+        }
+        return Task.CompletedTask;
+    }
+
+    private readonly SessionCalendarNavigator.SessionUrlFactory _urlFactory = new("opensessions");
 }

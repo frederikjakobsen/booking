@@ -1,41 +1,10 @@
 ﻿using BookingApp.Data;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 
 namespace BookingApp.Shared
 {
-    public class SessionNavigator
-    {
-        private readonly ISessionCalendar _sessionCalendar;
-        private readonly string _path;
-
-        public SessionNavigator(ISessionCalendar sessionCalendar, string path)
-        {
-            _sessionCalendar = sessionCalendar;
-            _path = path;
-        }
-
-        private string UrlForDate(DateTime date)
-        {
-            return  $"/{_path}/{date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
-        }
-
-        public string GetNextSessionDayUrl(DateTime date)
-        {
-            return  UrlForDate(_sessionCalendar.NextDayWithSessions(date));
-        }
-
-        public string GetPreviousSessionDayUrl(DateTime date)
-        {
-            var previousDayWithSessions = _sessionCalendar.PreviousDayWithSessions(date);
-            if (previousDayWithSessions < DateTime.Today)
-                return null;
-            return UrlForDate(previousDayWithSessions);
-        }
-    }
-
     public class ResolvedTeamSession
     {
         public TimeSlot TimeSlot { get; set; }

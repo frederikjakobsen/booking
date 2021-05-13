@@ -1,0 +1,81 @@
+﻿@using System.Linq
+@using System.Threading.Tasks
+@using BookingApp.Shared
+@using Microsoft.AspNetCore.Components
+
+<div class="row alert @_reservationStateStyle.TimeSlotContainerCustomization py-0 px-0 my-2">
+    <div class="flex-fill flex-grow-1 px-2" style="cursor: pointer" @onclick="() => Session.ToggleBookingState()">
+        <strong>@Session.StartTime</strong>@if (DisplayTeamName) {<span class="mx-2">@Session.TeamName</span>}<br>
+        @Session.EndTime
+    </div>
+    @if (_showInfoBtn)
+    {
+        <button class="alert border-0 my-0 h5 @_reservationStateStyle.ToggleButtonCustomization" @onclick="() => Session.ToggleReservationsView()"></button>
+    }
+</div>
+
+@code {
+    private bool _showInfoBtn;
+   
+    [Parameter]
+    public SessionBooking.SessionUiItem Session { get; set; }
+    
+    [Parameter]
+    public string UserId { get; set; }
+    
+    [CascadingParameter]
+    public bool DisplayTeamName { get; set; }
+    private ReservationStateStyle _reservationStateStyle;
+
+  protected override Task OnParametersSetAsync()
+  {
+      var reservations = Session.Reservations.ToList();
+      var state = new ReservationStateSimplifier(reservations, Session.Size);
+      _showInfoBtn = state.GetSessionState() != ReservationStateSimplifier.SessionReservationState.Empty;
+      _reservationStateStyle = ReservationStateStyle.Create(state.GetUserState(UserId), state.GetSessionState(), Session.Disabled);
+      return Task.CompletedTask;
+    }
+
+
+    private class ReservationStateStyle
+    {
+        public static ReservationStateStyle Create(ReservationStateSimplifier.UserSessionReservationState userState, ReservationStateSimplifier.SessionReservationState sessionState, bool disabled)
+        {
+            var buttonStyle = "bi-people";
+            switch (sessionState)
+            {
+                case ReservationStateSimplifier.SessionReservationState.Full:
+                    buttonStyle = "bi-people-fill";
+                    break;
+                case ReservationStateSimplifier.SessionReservationState.Queue:
+                    buttonStyle = "bi-hourglass-split";
+                    break;
+            }
+            
+            var containerStyle = "border";
+            switch (userState)
+            {
+                case ReservationStateSimplifier.UserSessionReservationState.Joined:
+                    containerStyle = "border-success";
+                    buttonStyle += " alert-success";
+                    break;
+                case ReservationStateSimplifier.UserSessionReservationState.InQueue:
+                    containerStyle = "border-warning";
+                    buttonStyle += " alert-warning";
+                    break;
+            }
+
+            if (disabled)
+                containerStyle = "alert-dark";
+            
+            return new()
+            {
+                TimeSlotContainerCustomization = containerStyle,
+                ToggleButtonCustomization = buttonStyle,
+            };
+        }
+        public string TimeSlotContainerCustomization { get; init; }
+        public string ToggleButtonCustomization { get; init; }
+    }
+
+}

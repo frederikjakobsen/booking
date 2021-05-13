@@ -1,0 +1,170 @@
+﻿@using System.Globalization
+<nav class="row justify-content-center">
+    <ul class="pagination my-0">
+        <li class="page-item @_previousWeek.Disabled">
+            <a class="page-link border-0" href="@_previousWeek.Url">
+                <span class="bi bi-chevron-left"></span>
+            </a>
+        </li>
+        <li class="nav-item dropdown">
+            <a class="nav-link" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                @Date.ToString("MMMM", CultureInfo.InvariantCulture)
+            </a>
+            <div class="dropdown-menu" aria-labelledby="navbarDropdown">
+                @foreach (var linkedMonth in OtherMonths)
+                {
+                    <a class="dropdown-item" href="@linkedMonth.Url">@linkedMonth.NameOfMonth</a>
+                }
+            </div>
+        </li>
+        <li class="page-item @_nextWeek.Disabled">
+            <a class="page-link border-0" href="@_nextWeek.Url">
+                <span class="bi bi-chevron-right"></span>
+            </a>
+        </li>
+    </ul>
+</nav>
+ <nav class="row justify-content-center">
+     <ul class="pagination">
+         @foreach (var linkedDay in WeekDays)
+         {
+             <li class="page-item text-center @linkedDay.Active @linkedDay.Disabled">@linkedDay.NameOfDay<br><a class="page-link" href="@linkedDay.Url">@linkedDay.Day</a></li>             
+         }
+     </ul>
+</nav>
+
+@code
+{
+    [Parameter]
+    public DateTime Date { get; set; }
+    
+    [Parameter]
+    public SessionUrlFactory UrlFactory { get; set; }
+    
+    [Parameter]
+    public ISessionCalendar SessionCalendar { get; set; }
+    
+    private IEnumerable<LinkedDay> WeekDays { get; set; }
+    
+    private IEnumerable<LinkedMonth> OtherMonths { get; set; }
+
+    private LinkedDay _nextWeek;
+    private LinkedDay _previousWeek;
+    private DateTime _mondayThisWeek;
+
+    public class LinkedDay
+    {
+        public LinkedDay(SessionUrlFactory urlFactory, DateTime date, DateTime active, bool valid)
+        {
+            if (active == date)
+                Active = "active";
+            if (!valid)
+                Disabled = "disabled";
+            Url = urlFactory.CreatePathWithDate(date);
+            Day = date.Day;
+            NameOfDay = date.DayOfWeek.ToString()[..3];
+            
+        }
+        public string Url { get; private set; }
+        public int Day { get; private set; }
+        public string Active { get; private set; }
+        public string Disabled { get; private set; }
+        public string NameOfDay { get; private set; }
+    }
+
+    public class LinkedMonth
+    {
+        public LinkedMonth(SessionUrlFactory urlFactory, DateTime date)
+        {
+            Url = urlFactory.CreatePathWithDate(date);
+            NameOfMonth = date.ToString("MMMM", CultureInfo.InvariantCulture);
+        }
+        public string Url { get; private set; }
+        public string NameOfMonth { get; private set; }
+    }
+
+    public class SessionUrlFactory
+    {
+        private readonly string _path;
+
+        public SessionUrlFactory(string path)
+        {
+            _path = path;
+        }
+        
+        public string CreatePathWithDate(DateTime date)
+        {
+            return $"/{_path}/{date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+        }
+    }
+
+    private void UpdateWeekDays()
+    {
+        var daysSinceMonday = 0;
+        switch (Date.DayOfWeek)
+        {
+            case DayOfWeek.Monday:
+                break;
+            case DayOfWeek.Tuesday:
+                daysSinceMonday = 1;
+                break;
+            case DayOfWeek.Wednesday:
+                daysSinceMonday = 2;
+                break;
+            case DayOfWeek.Thursday:
+                daysSinceMonday = 3;
+                break;
+            case DayOfWeek.Friday:
+                daysSinceMonday = 4;
+                break;
+            case DayOfWeek.Saturday:
+                daysSinceMonday = 5;
+                break;
+            case DayOfWeek.Sunday:
+                daysSinceMonday = 6;
+                break;                
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
+        _mondayThisWeek = Date - TimeSpan.FromDays(daysSinceMonday);
+        WeekDays = Enumerable.Range(0, 7).Select(e => 
+            new LinkedDay(UrlFactory, _mondayThisWeek + TimeSpan.FromDays(e), Date, 
+                _mondayThisWeek + TimeSpan.FromDays(e) >= DateTime.Today && SessionCalendar.NextDayWithSessions(_mondayThisWeek + TimeSpan.FromDays(e-1)) == _mondayThisWeek + TimeSpan.FromDays(e)));
+    }
+
+    private void UpdateMonths()
+    {
+        var startOfCurrentMonth = DateTime.Now.AddDays(1-DateTime.Now.Day);
+        OtherMonths = Enumerable.Range(0, 3).Select(e=>new LinkedMonth(UrlFactory, startOfCurrentMonth.AddMonths(e)));
+
+    }
+
+    private void UpdateWeekNavigation()
+    {
+        var nextWeeksDayWithSession = SessionCalendar.PreviousDayWithSessions(Date + TimeSpan.FromDays(8));
+        if (nextWeeksDayWithSession < _mondayThisWeek + TimeSpan.FromDays(7))
+        {
+            nextWeeksDayWithSession = SessionCalendar.NextDayWithSessions(Date + TimeSpan.FromDays(7));
+        }
+ 
+        _nextWeek=new LinkedDay(UrlFactory, nextWeeksDayWithSession, Date, true);
+
+        var aWeekAgo = Date - TimeSpan.FromDays(8);
+        if (aWeekAgo < DateTime.Today -TimeSpan.FromDays(1))
+        {
+            aWeekAgo = DateTime.Today -TimeSpan.FromDays(1);
+        }
+        var previousWeeksDayWithSession = SessionCalendar.NextDayWithSessions(aWeekAgo);
+        var valid = previousWeeksDayWithSession < _mondayThisWeek;
+        _previousWeek=new LinkedDay(UrlFactory, previousWeeksDayWithSession, Date, valid);
+    }
+    
+    protected override Task OnParametersSetAsync()
+    {
+        UpdateWeekDays();
+        UpdateMonths();
+        UpdateWeekNavigation();
+
+        return Task.CompletedTask;
+    }
+}
