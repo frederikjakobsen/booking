@@ -6,10 +6,8 @@
 @attribute [Authorize]
 
 <p>
-    <a href="@_openSessionLink">Book open session</a>
-</p>
-<p>
-    <a href="@_teamSessionLink">Book team session</a>
+    <a class="btn btn-primary btn-sm" href="/opensessions/">Book open session</a>
+    <a class="btn btn-info btn-sm" href="/teamsessions/">Book team session</a>
 </p>
 
 @if (_reservationDetails.Any())
@@ -20,16 +18,25 @@
         {
             <tr>
                 <td>
-                    <a href=@reservation.SessionBookingPageUrl>@reservation.StartTime</a>
+                    <a class="btn btn-link btn-sm" href=@reservation.SessionBookingPageUrl>@reservation.StartTime</a>
                 </td>
                 <td>
-                    @reservation.Team
+                    @{
+                        if (reservation.Team == "Open")
+                        {
+                            <span class="badge badge-primary">@reservation.Team</span>        
+                        }
+                        else
+                        {
+                            <span class="badge badge-info">@reservation.Team</span>   
+                        }
+                    }
                 </td>
                 <td>
                     @reservation.QueueText
                 </td>
                 <td>
-                    <button @onclick="()=>CancelBooking(reservation)">Cancel booking</button>
+                    <button class="btn btn-light btn-sm" @onclick="()=>CancelBooking(reservation)">Cancel</button>
                 </td>
             </tr>
         }
@@ -43,9 +50,6 @@ else
 
 @code
 {
-    private readonly string _openSessionLink = CreatePathWithDate("opensessions", DateTime.Today);
-    private readonly string _teamSessionLink =  CreatePathWithDate("teamsessions", DateTime.Today);
-
     class OwnReservationUi
     {
         public string Team { get; init; }
