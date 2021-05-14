@@ -159,12 +159,22 @@
         _previousWeek=new LinkedDay(UrlFactory, previousWeeksDayWithSession, Date, valid);
     }
     
+    
+    private void UpdateDateToOneWithSessions()
+    {
+        if (Date < DateTime.Today)
+            Date = DateTime.Today;
+        Date = SessionCalendar.NextDayWithSessions(Date - TimeSpan.FromDays(1));
+    }
+    
     protected override Task OnParametersSetAsync()
     {
+        UpdateDateToOneWithSessions();
         UpdateWeekDays();
         UpdateMonths();
         UpdateWeekNavigation();
 
         return Task.CompletedTask;
     }
+
 }
