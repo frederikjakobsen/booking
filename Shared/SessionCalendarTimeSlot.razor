@@ -19,7 +19,7 @@
     <div>
     @if (_showInfoBtn)
     {
-        <button class="alert border-0 m-1 pl-0 pr-3 py-2 h5 @_reservationStateStyle.ToggleButtonCustomization" @onclick="() => Session.ToggleReservationsView()"></button>
+        <button class="alert border-0 m-1 pl-0 px-2 py-2 h5 @_reservationStateStyle.ToggleButtonCustomization" @onclick="() => Session.ToggleReservationsView()"></button>
     }
     </div>
 </div>
@@ -61,25 +61,31 @@
                     buttonStyle = "bi-hourglass-split";
                     break;
             }
-            
             var containerStyle = "border";
-            switch (userState)
+            if (disabled)
             {
-                case ReservationStateSimplifier.UserSessionReservationState.Joined:
-                    containerStyle = "alert-success border-success";
-                    buttonStyle += " alert-success";
-                    break;
-                case ReservationStateSimplifier.UserSessionReservationState.InQueue:
-                    containerStyle = "alert-warning border-warning";
-                    buttonStyle += " alert-warning";
-                    break;
-                case ReservationStateSimplifier.UserSessionReservationState.None:
-                    buttonStyle += " alert-light";
-                    break;
+                containerStyle = "alert-dark";
+                buttonStyle += " alert-dark";
+
+            }
+            else
+            {
+                switch (userState)
+                {
+                    case ReservationStateSimplifier.UserSessionReservationState.Joined:
+                        containerStyle = "alert-success border-success";
+                        buttonStyle += " alert-success";
+                        break;
+                    case ReservationStateSimplifier.UserSessionReservationState.InQueue:
+                        containerStyle = "alert-warning border-warning";
+                        buttonStyle += " alert-warning";
+                        break;
+                    case ReservationStateSimplifier.UserSessionReservationState.None:
+                        buttonStyle += " alert-light";
+                        break;
+                }
             }
 
-            if (disabled)
-                containerStyle = "alert-dark";
             
             return new()
             {
