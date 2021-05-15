@@ -24,7 +24,7 @@
     protected override Task OnParametersSetAsync()
     {
         if (DateInput == null)
-            _date = DateTime.Now;
+            _date = DateTime.Today;
         else
         {
             _date = DateInput.Value;
