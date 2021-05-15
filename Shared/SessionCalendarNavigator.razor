@@ -3,12 +3,12 @@
     <ul class="pagination my-0">
         <li class="page-item @_previousWeek.Disabled">
             <a class="page-link border-0" href="@_previousWeek.Url">
-                <span class="bi bi-chevron-left"></span>
+                <span class="bi bi-chevron-left h5"></span>
             </a>
         </li>
         <li class="nav-item dropdown">
             <a class="nav-link" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                @Date.ToString("MMMM", CultureInfo.InvariantCulture)
+                @Date.ToString("MMMM", CultureInfo.InvariantCulture), <small class="text-muted"><small>Week @(CultureInfo.InvariantCulture.Calendar.GetWeekOfYear(Date, CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday))</small></small>
             </a>
             <div class="dropdown-menu" aria-labelledby="navbarDropdown">
                 @foreach (var linkedMonth in OtherMonths)
@@ -19,7 +19,7 @@
         </li>
         <li class="page-item @_nextWeek.Disabled">
             <a class="page-link border-0" href="@_nextWeek.Url">
-                <span class="bi bi-chevron-right"></span>
+                <span class="bi bi-chevron-right h5"></span>
             </a>
         </li>
     </ul>
@@ -28,7 +28,7 @@
      <ul class="pagination">
          @foreach (var linkedDay in WeekDays)
          {
-             <li class="page-item text-center @linkedDay.Active @linkedDay.Disabled">@linkedDay.NameOfDay<br><a class="page-link" href="@linkedDay.Url">@linkedDay.Day</a></li>             
+             <li class="page-item text-center @linkedDay.Active @linkedDay.Disabled">@linkedDay.NameOfDay<br><a class="page-link" href="@linkedDay.Url">@linkedDay.Day</a></li>
          }
      </ul>
 </nav>
