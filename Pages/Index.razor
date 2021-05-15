@@ -5,60 +5,83 @@
 @inject SpaceSchedule _spaceSchedule
 @attribute [Authorize]
 
-<p>
-    <a class="btn btn-primary btn-sm" href="/opensessions/">Book open session</a>
-    <a class="btn btn-info btn-sm" href="/teamsessions/">Book team session</a>
-</p>
+<div class="d-flex justify-content-start d-md-none mb-3">
+    <div><a class="btn btn-primary btn-sm mr-1" href="/opensessions/">Book open sessions</a></div> 
+    <div><a class="btn btn-info btn-sm mx-1" href="/teamsessions/">Book team sessions</a></div>
+</div>
 
 @if (_reservationDetails.Any())
 {
-<h3>Active bookings</h3>
-    <table>
-        @foreach (var reservation in _reservationDetails)
-        {
-            <tr>
-                <td>
-                    <a class="btn btn-link btn-sm" href=@reservation.SessionBookingPageUrl>@reservation.StartTime</a>
-                </td>
-                <td>
-                    @{
-                        if (reservation.Team == "Open")
-                        {
-                            <span class="badge badge-primary">@reservation.Team</span>        
-                        }
-                        else
-                        {
-                            <span class="badge badge-info">@reservation.Team</span>   
-                        }
-                    }
-                </td>
-                <td>
-                    @reservation.QueueText
-                </td>
-                <td>
-                    <button class="btn btn-light btn-sm" @onclick="()=>CancelBooking(reservation)">Cancel</button>
-                </td>
-            </tr>
-        }
+    @foreach (var reservation in _reservationSections)
+    {
+        <a class="text-@reservation.Style" href=@reservation.SessionBookingPageUrl>@reservation.Date</a>
+        <div class="d-flex flex-column px-0 py-0">
+            <span class="badge small badge-@reservation.Style ">@reservation.Team</span>
+        </div>
 
-    </table>
+        <div class="alert alert-@reservation.Style d-flex flex-column px-2 py-1 mt-1">      
+            @{
+                for(int i =0; i<reservation.Entries.Count; i++)
+                {
+                    var entry = reservation.Entries[i];
+                    <div class="d-flex flex-row justify-content-between align-items-center">
+                        <div class="px-0">
+                            @entry.StartTime - @entry.EndTime
+                        </div>
+                        <div class="px-0 text-danger font-weight-bold small">
+                            @entry.QueueText
+                        </div>
+                        <button class="btn btn-@reservation.Style btn-sm" @onclick="() => CancelBooking(entry.Generator)">Cancel</button>
+                    </div>
+                    if (i != reservation.Entries.Count - 1)
+                    {
+                        <div><hr class="my-1 p-0"></div>
+                    }
+                }
+            }
+        </div>
+    }
 }
 else
 {
-<em>You have no active bookings</em>
+    <em>You have no active bookings</em>
 }
 
 @code
 {
+
+    class ReservationSection
+    {
+        public string SessionBookingPageUrl { get; init; }
+        public string Team { get; init; }
+        public string Style { get; init;}
+        public string Date { get; init; }
+        public List<ReservationEntry> Entries { get; init; }
+    }
+    
+    class ReservationEntry
+    {
+        public string StartTime { get; init; }
+        public string EndTime { get; init; }
+        public string QueueText { get; set; }
+        public OwnReservationUi Generator { get; init; }
+    }
+    
     class OwnReservationUi
     {
+        public bool ShowHeader { get; set; }
+        public string Style { get; init;}
+        public string Date { get; init; }
         public string Team { get; init; }
         public string QueueText { get; set; }
         public string SessionBookingPageUrl { get; init; }
         public string StartTime { get; init; }
+        public string EndTime { get; init; }
         public UserReservation Generator { get; init; }
     }
 
+    private readonly List<ReservationSection> _reservationSections = new();
+    
     private readonly List<OwnReservationUi> _reservationDetails = new();
 
     private int GetTeamSize(Team team, DateTime startTime)
@@ -74,6 +97,7 @@ else
     {
         
         var userReservations = (await _bookingService.GetLoggedOnUserReservations()).OrderBy(e => e.StartTime);
+        
         foreach (var userres in userReservations)
         {
             var team = GetTeamForReservation(userres);
@@ -86,9 +110,14 @@ else
                 Generator = userres,
                 QueueText = "",
                 SessionBookingPageUrl = CreateSessionBookingPageUrl(userres),
-                StartTime = userres.StartTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
-                Team = team.Name
+                Date = userres.StartTime.ToString("dddd, MMMM d", CultureInfo.InvariantCulture),
+                StartTime = userres.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture),
+                EndTime = (userres.StartTime + team.Duration).ToString("HH:mm", CultureInfo.InvariantCulture),
+                Team = team.Name,
+                Style = team.Name == "Open"? "primary": "info",
             };
+
+            
             var teamSize = GetTeamSize(team, userres.StartTime);
             if (userPosition >= teamSize)
             {
@@ -97,6 +126,77 @@ else
             }
             _reservationDetails.Add(details);
         }
+        OrganizeReservations();
+    }
+
+    private void OrganizeReservations()
+    {
+        _reservationSections.RemoveAll(e=>true);
+        if (!_reservationDetails.Any())
+            return;
+        var first = _reservationDetails.First();
+        var previousEndTime = first.EndTime;
+        var previousTeam = first.Team;
+
+        var currentSection = new ReservationSection
+        {
+            Date = first.Date,
+            Entries = new()
+            {
+                new ()
+                {
+                    Generator = first,
+                    StartTime = first.StartTime,
+                    EndTime = first.EndTime,
+                    QueueText = first.QueueText
+                }
+            },
+            Style = first.Style,
+            Team = first.Team,
+            SessionBookingPageUrl = first.SessionBookingPageUrl
+        };
+        foreach (var details in _reservationDetails)
+        {
+            var isContinuation = (previousTeam == details.Team && previousEndTime == details.StartTime);
+            if (isContinuation)
+            {
+                
+                currentSection.Entries.Add(new ()
+                {
+                    Generator = details,
+                    StartTime = details.StartTime,
+                    EndTime = details.EndTime,
+                    QueueText = first.QueueText
+                });
+            }
+            else
+            {
+                currentSection = new()
+                {
+                    Date = details.Date,
+                    Style = details.Style,
+                    Team = details.Team,
+                    SessionBookingPageUrl = details.SessionBookingPageUrl,
+                    Entries = new()
+                    {
+                        new()
+                        {
+                            Generator = details,
+                            StartTime = details.StartTime,
+                            EndTime = details.EndTime,
+                            QueueText = details.QueueText
+                        }
+                    }
+                };
+                _reservationSections.Add(currentSection);
+            }
+            
+            details.ShowHeader = !isContinuation;
+            previousTeam = details.Team;
+            previousEndTime = details.EndTime;
+            
+        }
+        
     }
 
     private Team GetTeamForReservation(UserReservation userReservation)
@@ -107,8 +207,8 @@ else
     private async Task CancelBooking(OwnReservationUi reservation)
     {
         await _bookingService.CancelUserReservation(reservation.Generator);
-
         _reservationDetails.Remove(reservation);
+        OrganizeReservations();
     }
 
     private static string CreatePathWithDate(string path, DateTime date)
