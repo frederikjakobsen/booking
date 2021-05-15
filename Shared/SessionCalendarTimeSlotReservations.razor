@@ -1,32 +1,33 @@
 ﻿@inject UserService UserService
 
-<div class="row @_reservationStateStyle.TimeSlotContainerCustomization alert alert-heading py-0 px-0 my-2 text-secondary">
-    <div class="flex-fill flex-grow-1 px-2 row">
-        <div class="col-2 d-flex flex-column">
-            <div class="row">
-                <div class="col "><strong>@Session.StartTime</strong></div>
-            </div>
-            <div class="row mt-auto">
-                <div class="col">@Session.EndTime</div>
-            </div>
+<div class="@_reservationStateStyle.TimeSlotContainerCustomization alert alert-heading text-dark d-flex flex-row justify-content-between p-0 my-2 mx-0" style="cursor: pointer" @onclick="() => Session.ToggleReservationsView()">
+    <div class="d-flex flex-column px-1">
+        <div class="row">
+            <div class="col"><strong>@Session.StartTime</strong></div>
         </div>
-        <div class="col py-0 px-sm-3 px-md-0 my-0">
-            @if (Session.Available > 0)
-            {
-                <div class="text-center m-0 p-0"><span class="text-success small font-weight-bold">@Session.Available available</span></div>
-            }
-            @foreach (var userDescription in _userDescriptions)
-            {
-                <span class="bi-check text-success"></span><span>@userDescription</span><br>
-            }
-            @foreach (var userDescription in _userDescriptionsInQueue)
-            {
-                <span class="bi-hourglass small">@userDescription</span><br>
-            }
+        <div class="row mt-auto">
+            <div class="col">@Session.EndTime</div>
         </div>
     </div>
-    <button class="alert my-1 mx-1 h5 btn-timeslotinfo @_reservationStateStyle.ToggleButtonCustomization" @onclick="() => Session.ToggleReservationsView()"></button>
-</div>  
+    <div class="px-1">
+        @if (Session.Available > 0)
+        {
+            <div class="text-center m-0 p-0"><span class="text-success small font-weight-bold font-italic">@Session.Available available</span></div>
+        } else if (Session.Available < 0)
+        {
+            <div class="text-center m-0 p-0"><span class="text-danger small font-weight-bold font-italic">@(Math.Abs(Session.Available)) in queue</span></div>
+        }
+        @foreach (var userDescription in _userDescriptions)
+        {
+            <span class="bi-check text-success"></span><span>@userDescription</span><br>
+        }
+        @foreach (var userDescription in _userDescriptionsInQueue)
+        {
+            <span class="bi-hourglass small">@userDescription</span><br>
+        }
+    </div>
+    <div><button class="h5 m-1 px-3 btn-timeslotinfo bi-chevron-up align-text-top bg-transparent"></button></div>
+</div>
 
 @code {
     
@@ -45,40 +46,22 @@
     {
         public static ReservationStateStyle Create(ReservationStateSimplifier.UserSessionReservationState userState, ReservationStateSimplifier.SessionReservationState sessionState)
         {
-            var buttonStyle = "bi-people";
-            switch (sessionState)
-            {
-                case ReservationStateSimplifier.SessionReservationState.Full:
-                    buttonStyle = "bi-people-fill";
-                    break;
-                case ReservationStateSimplifier.SessionReservationState.Queue:
-                    buttonStyle = "bi-hourglass-split";
-                    break;
-            }
-            
             var containerStyle = "border";
             switch (userState)
             {
                 case ReservationStateSimplifier.UserSessionReservationState.Joined:
                     containerStyle = "border-success";
-                    buttonStyle += " alert-success";
                     break;
                 case ReservationStateSimplifier.UserSessionReservationState.InQueue:
                     containerStyle = "border-warning";
-                    buttonStyle += " alert-warning";
-                    break;
-                    case ReservationStateSimplifier.UserSessionReservationState.None:
-                    buttonStyle += " alert-light";
                     break;
             }
             return new()
             {
-                TimeSlotContainerCustomization = containerStyle,
-                ToggleButtonCustomization = buttonStyle,
+                TimeSlotContainerCustomization = containerStyle
             };
         }
         public string TimeSlotContainerCustomization { get; init; }
-        public string ToggleButtonCustomization { get; init; }
     }
 
     private ReservationStateStyle _reservationStateStyle;

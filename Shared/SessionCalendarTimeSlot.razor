@@ -3,15 +3,25 @@
 @using BookingApp.Shared
 @using Microsoft.AspNetCore.Components
 
-<div class="row alert @_reservationStateStyle.TimeSlotContainerCustomization py-0 px-0 my-2">
-    <div class="flex-fill flex-grow-1 px-2" style="cursor: pointer" @onclick="() => Session.ToggleBookingState()">
-        <strong>@Session.StartTime</strong>@if (DisplayTeamName) {<span class="mx-2">@Session.TeamName</span>}<br>
-        @Session.EndTime
+<div class="alert @_reservationStateStyle.TimeSlotContainerCustomization d-flex flex-row justify-content-between p-0 my-2 mx-0 py-0 px-0 my-2">
+    <div class="d-flex flex-column px-1" style="cursor: pointer" @onclick="() => Session.ToggleBookingState()">
+        <div class="row">
+            <div class="col"><strong>@Session.StartTime</strong></div>
+        </div>
+        <div class="row mt-auto">
+            <div class="col">@Session.EndTime</div>
+        </div>
     </div>
+    <div class="px-1 flex-fill" style="cursor: pointer" @onclick="() => Session.ToggleBookingState()">
+        @if (DisplayTeamName)
+        {<span class="mx-2">@Session.TeamName</span>}
+    </div>
+    <div>
     @if (_showInfoBtn)
     {
-        <button class="alert border-0 my-0 px-4 py-2 h5 @_reservationStateStyle.ToggleButtonCustomization" @onclick="() => Session.ToggleReservationsView()"></button>
+        <button class="alert border-0 m-1 pl-0 pr-3 py-2 h5 @_reservationStateStyle.ToggleButtonCustomization" @onclick="() => Session.ToggleReservationsView()"></button>
     }
+    </div>
 </div>
 
 @code {
