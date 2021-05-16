@@ -71,16 +71,20 @@ namespace BookingApp.Areas.Identity.Pages.Account
             [Display(Name = "Confirm password")]
             [Compare("Password", ErrorMessage = "The password and confirmation password do not match.")]
             public string ConfirmPassword { get; set; }
-            
+
             [Required]
             [DataType(DataType.Text)]
             [Display(Name = "Token")]
             public string Token { get; set; }
         }
+        
+        public string Token { get; set; }
 
-        public async Task OnGetAsync(string returnUrl = null)
+        public async Task OnGetAsync(string token, string returnUrl = null)
         {
             ReturnUrl = returnUrl;
+            if (token is {Length: <= 64})
+                Token = token;
             ExternalLogins = (await _signInManager.GetExternalAuthenticationSchemesAsync()).ToList();
         }
 
