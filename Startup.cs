@@ -58,10 +58,12 @@ namespace BookingApp
             services.Configure<List<TeamOption>>(Configuration.GetSection("teams"));
             services.Configure<List<WeeklyScheduledTeamOption>>(Configuration.GetSection("schedule"));
             services.Configure<SpaceOptions>(Configuration.GetSection("space"));
+            services.Configure<AccountCreationTokenOptions>(Configuration);
 
 
             services.AddRazorPages();
             services.AddServerSideBlazor();
+            services.AddSingleton<AccountCreationTokenVerifier>();
             services.AddScoped<AuthenticationStateProvider, RevalidatingIdentityAuthenticationStateProvider<ApplicationUser>>();
             services.AddScoped<BookingService>();
             services.AddScoped<TeamService>();

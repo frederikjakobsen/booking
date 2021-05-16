@@ -25,6 +25,9 @@ namespace BookingApp
                     config.AddJsonFile("schedule.json", 
                         optional: true, 
                         reloadOnChange: false);
+                    config.AddJsonFile("token.json", 
+                        optional: false, 
+                        reloadOnChange: false);
                 })
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
